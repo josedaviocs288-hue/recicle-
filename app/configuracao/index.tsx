@@ -1,4 +1,5 @@
 import { styles } from "@/src/styles/configuracaoStyles";
+import { logout as encerrarSessao } from "@/src/services/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import { router } from "expo-router";
@@ -97,6 +98,7 @@ export default function Configuracao() {
         style: "destructive",
         onPress: async () => {
           await AsyncStorage.clear();
+          await encerrarSessao();
           Alert.alert("Dados apagados com sucesso");
           router.replace("/login");
         },

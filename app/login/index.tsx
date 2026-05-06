@@ -40,10 +40,14 @@ export default function LoginScreen() {
     router.replace("/home");
   } catch (err: any) {
 
+    const mensagem = String(err?.message || "");
+
     if (err?.response?.status === 401) {
       setErro("Email ou senha inválidos.");
+    } else if (mensagem.includes("SecureStore") || mensagem.includes("Token")) {
+      setErro(mensagem);
     } else if (!err?.response) {
-      setErro("Sem conexão com o servidor.");
+      setErro("Sem conexão com o servidor. Verifique sua internet e tente novamente.");
     } else {
       setErro(
         err?.response?.data?.message || "Não foi possível fazer login."

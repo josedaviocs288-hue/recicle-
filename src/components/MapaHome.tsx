@@ -41,8 +41,13 @@ type DoacaoMapaItem = {
   status?: string | null;
   doadorNome?: string | null;
   doadorEmail?: string | null;
+  doadorId?: number | string | null;
   coletorNome?: string | null;
   coletorEmail?: string | null;
+  coletorId?: number | string | null;
+  doador?: { id?: number | string | null; email?: string | null; nome?: string | null } | null;
+  coletor?: { id?: number | string | null; email?: string | null; nome?: string | null } | null;
+  user?: { id?: number | string | null; email?: string | null; nome?: string | null } | null;
   enderecoProtegido?: boolean;
 };
 
@@ -122,6 +127,74 @@ function materiaisTexto(materiais?: string | string[] | null) {
   return String(materiais).split(",").map((m) => m.trim()).filter(Boolean).join(", ") || "Material não informado";
 }
 
+
+function emailDoColetor(item: DoacaoMapaItem) {
+  return String(item.coletorEmail || item.coletor?.email || "").trim().toLowerCase();
+}
+
+function idDoColetor(item: DoacaoMapaItem) {
+  const id = item.coletorId ?? item.coletor?.id;
+  const numero = Number(id);
+  return Number.isFinite(numero) && numero > 0 ? numero : null;
+}
+
+function emailDoDoador(item: DoacaoMapaItem) {
+  return String(item.doadorEmail || item.doador?.email || item.user?.email || "").trim().toLowerCase();
+}
+
+function idDoDoador(item: DoacaoMapaItem) {
+  const id = item.doadorId ?? item.doador?.id ?? item.user?.id;
+  const numero = Number(id);
+  return Number.isFinite(numero) && numero > 0 ? numero : null;
+}
+
+function doacaoSemColetor(item: DoacaoMapaItem) {
+  return !emailDoColetor(item) && !idDoColetor(item);
+}
+
+function pertenceAoColetor(item: DoacaoMapaItem, emailUsuario: string, usuarioId: number | null) {
+  const email = emailDoColetor(item);
+  const id = idDoColetor(item);
+
+  if (emailUsuario && email) return email === emailUsuario;
+  if (usuarioId && id) return id === usuarioId;
+
+  return false;
+}
+
+function pertenceAoDoador(item: DoacaoMapaItem, emailUsuario: string, usuarioId: number | null) {
+  const email = emailDoDoador(item);
+  const id = idDoDoador(item);
+
+  if (emailUsuario && email) return email === emailUsuario;
+  if (usuarioId && id) return id === usuarioId;
+
+  // Se o backend já retorna somente as doações do usuário e não manda dono,
+  // mantemos compatibilidade para não esconder tudo sem necessidade.
+  return !email && !id;
+}
+
+function doacaoVisivelParaUsuario(
+  item: DoacaoMapaItem,
+  tipoUsuario: TipoUsuario,
+  emailUsuario: string,
+  usuarioId: number | null
+) {
+  const status = normalizarStatus(item.status);
+
+  if (!["PENDENTE", "ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(status)) {
+    return false;
+  }
+
+  if (tipoUsuario === "COLETOR") {
+    // Coletor só vê: doações livres (PENDENTE sem coletor) e as que ele mesmo aceitou.
+    if (status === "PENDENTE") return doacaoSemColetor(item);
+    return pertenceAoColetor(item, emailUsuario, usuarioId);
+  }
+
+  return pertenceAoDoador(item, emailUsuario, usuarioId);
+}
+
 function statusLabel(status?: string | null) {
   switch (normalizarStatus(status)) {
     case "PENDENTE":
@@ -151,9 +224,11 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
   const cameraRef = useRef<any>(null);
   const mountedRef = useRef(true);
   const ultimaLocalizacaoEnviadaRef = useRef<Coordenada | null>(null);
+  const ultimoAutoCenterIdRef = useRef<string | number | null>(null);
 
   const [tipoUsuario, setTipoUsuario] = useState<TipoUsuario>(tipoUsuarioProp);
   const [emailUsuario, setEmailUsuario] = useState("");
+  const [usuarioId, setUsuarioId] = useState<number | null>(null);
   const [minhaLocalizacao, setMinhaLocalizacao] = useState<Coordenada | null>(null);
   const [doacoes, setDoacoes] = useState<DoacaoMapaItem[]>([]);
   const [doacaoSelecionadaId, setDoacaoSelecionadaId] = useState<number | null>(null);
@@ -174,14 +249,17 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
 
   useEffect(() => {
     async function carregarUsuario() {
-      const [tipoSalvo, emailSalvo] = await Promise.all([
+      const [tipoSalvo, emailSalvo, idSalvo] = await Promise.all([
         AsyncStorage.getItem("tipoUsuario"),
         AsyncStorage.getItem("emailUsuario"),
+        AsyncStorage.getItem("usuarioId"),
       ]);
 
       const tipo = String(tipoSalvo || tipoUsuarioProp || "DOADOR").trim().toUpperCase();
+      const id = Number(idSalvo);
       setTipoUsuario(tipo === "COLETOR" ? "COLETOR" : "DOADOR");
       setEmailUsuario(String(emailSalvo || "").trim().toLowerCase());
+      setUsuarioId(Number.isFinite(id) && id > 0 ? id : null);
     }
 
     carregarUsuario();
@@ -194,10 +272,7 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
 
       const response = await api.get<ApiResponse<DoacaoMapaItem[]>>("/doacoes");
       const lista = extrairLista(response.data?.data ?? response.data)
-        .filter((item) => {
-          const status = normalizarStatus(item.status);
-          return ["PENDENTE", "ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(status);
-        })
+        .filter((item) => doacaoVisivelParaUsuario(item, tipoUsuario, emailUsuario, usuarioId))
         .filter((item) => coordenadaValida(item.latitude, item.longitude));
 
       if (!mountedRef.current) return;
@@ -212,7 +287,7 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [emailUsuario, tipoUsuario, usuarioId]);
 
   useEffect(() => {
     carregarDoacoes();
@@ -283,13 +358,12 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
 
     return doacoes.filter((item) => {
       const status = normalizarStatus(item.status);
-      const emailColetor = String(item.coletorEmail || "").trim().toLowerCase();
       return (
         ["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(status) &&
-        (!emailUsuario || emailColetor === emailUsuario)
+        pertenceAoColetor(item, emailUsuario, usuarioId)
       );
     });
-  }, [doacoes, emailUsuario, tipoUsuario]);
+  }, [doacoes, emailUsuario, tipoUsuario, usuarioId]);
 
   const doacaoAtiva = useMemo(() => {
     const selecionada = doacoes.find((item) => item.id === doacaoSelecionadaId);
@@ -425,10 +499,14 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
   }, [destino, minhaLocalizacao]);
 
   useEffect(() => {
-    if (!loading) {
-      const timeout = setTimeout(centralizarMapa, 400);
-      return () => clearTimeout(timeout);
-    }
+    if (loading) return;
+
+    const chave = doacaoAtiva?.id ?? "sem-doacao";
+    if (ultimoAutoCenterIdRef.current === chave) return;
+
+    ultimoAutoCenterIdRef.current = chave;
+    const timeout = setTimeout(centralizarMapa, 400);
+    return () => clearTimeout(timeout);
   }, [centralizarMapa, loading, doacaoAtiva?.id]);
 
 

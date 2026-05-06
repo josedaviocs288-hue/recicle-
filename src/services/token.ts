@@ -1,53 +1,78 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 
-const TOKEN_KEY = "@recicleplus_token";
-const LEGACY_TOKEN_KEY = "token";
+// SecureStore só aceita letras, números, '.', '-' e '_'.
+// Não use '@' aqui, pois isso causa: Invalid key provided to SecureStore.
+const TOKEN_KEY = "recicleplus_token";
+
+// Chaves antigas usadas no AsyncStorage. Mantemos para migração/limpeza.
+const LEGACY_TOKEN_KEYS = ["@recicleplus_token", "token", "recicleplus_token"];
 
 const USER_TYPE_KEY = "@recicleplus_user_type";
+
+function limparValor(valor?: string | null): string | null {
+  const texto = String(valor || "").trim();
+  return texto ? texto : null;
+}
 
 // ================= TOKEN =================
 
 export async function setToken(token: string): Promise<void> {
-  const valor = String(token || "").trim();
+  const valor = limparValor(token);
 
-  if (!valor) return;
+  if (!valor) {
+    throw new Error("Token vazio. Não foi possível salvar a sessão.");
+  }
 
-  // Salva o token no armazenamento seguro do aparelho
+  const disponivel = await SecureStore.isAvailableAsync();
+
+  if (!disponivel) {
+    throw new Error("SecureStore indisponível neste dispositivo.");
+  }
+
   await SecureStore.setItemAsync(TOKEN_KEY, valor);
 
-  // Remove cópias antigas/inseguras do AsyncStorage
-  await AsyncStorage.multiRemove([TOKEN_KEY, LEGACY_TOKEN_KEY]);
+  // Remove cópias antigas/inseguras do AsyncStorage.
+  await AsyncStorage.multiRemove(LEGACY_TOKEN_KEYS);
 }
 
 export async function getToken(): Promise<string | null> {
-  const secureToken = await SecureStore.getItemAsync(TOKEN_KEY);
+  const disponivel = await SecureStore.isAvailableAsync();
 
-  if (secureToken && secureToken.trim() !== "") {
-    return secureToken;
+  if (disponivel) {
+    const secureToken = limparValor(await SecureStore.getItemAsync(TOKEN_KEY));
+
+    if (secureToken) {
+      return secureToken;
+    }
   }
 
   // Migração automática: se ainda existir token antigo no AsyncStorage,
-  // move para o SecureStore e apaga do AsyncStorage.
-  const legacyToken =
-    (await AsyncStorage.getItem(TOKEN_KEY)) ||
-    (await AsyncStorage.getItem(LEGACY_TOKEN_KEY));
+  // move para o SecureStore com a chave correta e apaga do AsyncStorage.
+  for (const key of LEGACY_TOKEN_KEYS) {
+    const legacyToken = limparValor(await AsyncStorage.getItem(key));
 
-  if (!legacyToken || legacyToken.trim() === "") {
-    return null;
+    if (legacyToken) {
+      if (disponivel) {
+        await SecureStore.setItemAsync(TOKEN_KEY, legacyToken);
+        await AsyncStorage.multiRemove(LEGACY_TOKEN_KEYS);
+      }
+
+      return legacyToken;
+    }
   }
 
-  const valor = legacyToken.trim();
-
-  await SecureStore.setItemAsync(TOKEN_KEY, valor);
-  await AsyncStorage.multiRemove([TOKEN_KEY, LEGACY_TOKEN_KEY]);
-
-  return valor;
+  return null;
 }
 
 export async function removeToken(): Promise<void> {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
-  await AsyncStorage.multiRemove([TOKEN_KEY, LEGACY_TOKEN_KEY]);
+  const disponivel = await SecureStore.isAvailableAsync();
+
+  if (disponivel) {
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
+  }
+
+  await AsyncStorage.multiRemove(LEGACY_TOKEN_KEYS);
 }
 
 // ================= TIPO USUÁRIO =================

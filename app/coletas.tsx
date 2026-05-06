@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getUserType } from "@/src/services/token";
 import { api } from "@/src/services/api";
 import { router } from "expo-router";
@@ -77,6 +78,8 @@ type AcaoStatus = "ACEITAR" | "EM_ROTA" | "COLETA_REALIZADA";
 
 export default function ColetasScreen() {
   const [tipoUsuario, setTipoUsuario] = useState("");
+  const [emailUsuario, setEmailUsuario] = useState("");
+  const [usuarioId, setUsuarioId] = useState<number | null>(null);
   const [carregandoTipo, setCarregandoTipo] = useState(true);
   const [doacoes, setDoacoes] = useState<Doacao[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,10 +90,17 @@ export default function ColetasScreen() {
   useEffect(() => {
     async function carregarTipo() {
       try {
-        const tipo = await getUserType();
+        const [tipo, emailSalvo, idSalvo] = await Promise.all([
+          getUserType(),
+          AsyncStorage.getItem("emailUsuario"),
+          AsyncStorage.getItem("usuarioId"),
+        ]);
         const normalizado = String(tipo || "").trim().toUpperCase();
+        const id = Number(idSalvo);
 
         setTipoUsuario(normalizado || "DOADOR");
+        setEmailUsuario(String(emailSalvo || "").trim().toLowerCase());
+        setUsuarioId(Number.isFinite(id) && id > 0 ? id : null);
       } catch (error) {
         setTipoUsuario("DOADOR");
       } finally {
@@ -244,6 +254,43 @@ export default function ColetasScreen() {
     return String(status || "").trim().toUpperCase();
   }
 
+
+  function emailDoColetor(item: Doacao) {
+    return String(item.coletorEmail || item.coletor?.email || "").trim().toLowerCase();
+  }
+
+  function idDoColetor(item: Doacao) {
+    const id = item.coletorId ?? item.coletor?.id;
+    const numero = Number(id);
+    return Number.isFinite(numero) && numero > 0 ? numero : null;
+  }
+
+  function doacaoSemColetor(item: Doacao) {
+    return !emailDoColetor(item) && !idDoColetor(item);
+  }
+
+  function pertenceAoColetor(item: Doacao) {
+    const email = emailDoColetor(item);
+    const id = idDoColetor(item);
+
+    if (emailUsuario && email) return email === emailUsuario;
+    if (usuarioId && id) return id === usuarioId;
+
+    return false;
+  }
+
+  function doacaoVisivelParaColetor(item: Doacao) {
+    const status = normalizarStatus(item.status);
+
+    if (status === "PENDENTE") return doacaoSemColetor(item);
+
+    if (["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(status)) {
+      return pertenceAoColetor(item);
+    }
+
+    return false;
+  }
+
   function atualizarListaLocal(id: number, novoStatus: string, dadosAtualizados?: Partial<Doacao>) {
     const statusNormalizado = normalizarStatus(novoStatus);
 
@@ -357,29 +404,19 @@ export default function ColetasScreen() {
   }
 
   const doacoesAtivas = useMemo(() => {
-    return doacoes.filter((item) => {
-      const status = normalizarStatus(item.status);
-
-      return (
-        status === "PENDENTE" ||
-        status === "ACEITA" ||
-        status === "EM_ROTA" ||
-        status === "AGUARDANDO_CONFIRMACAO"
-      );
-    });
-  }, [doacoes]);
+    return doacoes.filter(doacaoVisivelParaColetor);
+  }, [doacoes, emailUsuario, usuarioId]);
 
   const minhasColetasAtivas = useMemo(() => {
     return doacoes.filter((item) => {
       const status = normalizarStatus(item.status);
 
       return (
-        status === "ACEITA" ||
-        status === "EM_ROTA" ||
-        status === "AGUARDANDO_CONFIRMACAO"
+        ["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(status) &&
+        pertenceAoColetor(item)
       );
     });
-  }, [doacoes]);
+  }, [doacoes, emailUsuario, usuarioId]);
 
   const limiteColetasAtingido = minhasColetasAtivas.length >= 3;
   function renderBotoes(item: Doacao, processando: boolean) {
