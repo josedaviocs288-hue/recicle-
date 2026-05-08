@@ -28,6 +28,12 @@ type Coordenada = {
   longitude: number;
 };
 
+type LocalizacaoGPS = Coordenada & {
+  accuracy?: number | null;
+  speed?: number | null;
+  timestamp: number;
+};
+
 type DoacaoMapaItem = {
   id: number;
   latitude?: number | string | null;
@@ -51,6 +57,14 @@ type DoacaoMapaItem = {
   enderecoProtegido?: boolean;
 };
 
+type PontoColetaSeletiva = {
+  id: number;
+  nome: string;
+  latitude: number;
+  longitude: number;
+  tipo: "COLETOR_RECICLAVEL" | "ILHA_ECOLOGICA";
+};
+
 type ApiResponse<T> = {
   success?: boolean;
   message?: string;
@@ -67,6 +81,54 @@ const ITAREMA_CENTRO: Coordenada = {
   latitude: -2.920012,
   longitude: -39.915818,
 };
+
+const PONTOS_COLETA_SELETIVA: PontoColetaSeletiva[] = [
+  { id: 1, nome: "E.M.E.F. Francisco Pedro Rodrigues", latitude: -2.917444, longitude: -39.932139, tipo: "COLETOR_RECICLAVEL" },
+  { id: 2, nome: "Igreja Sagrado Coração de Jesus", latitude: -2.917088, longitude: -39.92884, tipo: "COLETOR_RECICLAVEL" },
+  { id: 3, nome: "Centro Cultural", latitude: -2.921135, longitude: -39.925427, tipo: "COLETOR_RECICLAVEL" },
+  { id: 4, nome: "Liceu e EMEF Mundico Ribeiro", latitude: -2.920868, longitude: -39.923817, tipo: "COLETOR_RECICLAVEL" },
+  { id: 5, nome: "EEEP Rosângela Albuquerque de Couto e Rodoviária", latitude: -2.926188, longitude: -39.925541, tipo: "COLETOR_RECICLAVEL" },
+  { id: 6, nome: "EEM Luzia Araújo Barros", latitude: -2.919642, longitude: -39.921929, tipo: "COLETOR_RECICLAVEL" },
+  { id: 7, nome: "Câmara Municipal de Itarema", latitude: -2.920986, longitude: -39.916975, tipo: "COLETOR_RECICLAVEL" },
+  { id: 8, nome: "Posto de Saúde Lagoa Seca", latitude: -2.924421, longitude: -39.919383, tipo: "COLETOR_RECICLAVEL" },
+  { id: 9, nome: "Complexo Integrado de Atendimento à Saúde – CIAS", latitude: -2.91981, longitude: -39.920012, tipo: "COLETOR_RECICLAVEL" },
+  { id: 10, nome: "Praça Pedra Cheirosa", latitude: -2.923234, longitude: -39.913163, tipo: "COLETOR_RECICLAVEL" },
+  { id: 11, nome: "Praça João Batista Rios e Mercado Central", latitude: -2.921546, longitude: -39.913384, tipo: "COLETOR_RECICLAVEL" },
+  { id: 12, nome: "EMEF Padre Aristides Andrade Sales", latitude: -2.924067, longitude: -39.910794, tipo: "COLETOR_RECICLAVEL" },
+  { id: 13, nome: "Posto de Saúde de São Vicente", latitude: -2.930523, longitude: -39.891862, tipo: "COLETOR_RECICLAVEL" },
+  { id: 14, nome: "Guarda Municipal de Itarema", latitude: -2.926045, longitude: -39.906796, tipo: "COLETOR_RECICLAVEL" },
+  { id: 15, nome: "EMEF José Aniceto Sales", latitude: -2.919825, longitude: -39.917377, tipo: "COLETOR_RECICLAVEL" },
+  { id: 16, nome: "EMEF Professora Altair Giffone Tavares", latitude: -2.942439, longitude: -39.909509, tipo: "COLETOR_RECICLAVEL" },
+  { id: 17, nome: "Praça José Cosme de Couto (Porto dos Barcos)", latitude: -2.907238, longitude: -39.885439, tipo: "COLETOR_RECICLAVEL" },
+  { id: 18, nome: "Posto de Saúde de Porto dos Barcos", latitude: -2.90671, longitude: -39.886576, tipo: "COLETOR_RECICLAVEL" },
+  { id: 19, nome: "EMEF Vereador Pedro Penha (Porto dos Barcos)", latitude: -2.907262, longitude: -39.885759, tipo: "COLETOR_RECICLAVEL" },
+  { id: 20, nome: "Escola Sítio Alegre", latitude: -2.934674, longitude: -39.850481, tipo: "COLETOR_RECICLAVEL" },
+  { id: 21, nome: "Liceu de Almofala / EEM José Maria Monteiro", latitude: -2.936996, longitude: -39.834878, tipo: "COLETOR_RECICLAVEL" },
+  { id: 22, nome: "EMEF Francisco Alves Neto", latitude: -2.937972, longitude: -39.832054, tipo: "COLETOR_RECICLAVEL" },
+  { id: 23, nome: "Praça da Igreja Matriz de Almofala", latitude: -2.939777, longitude: -39.826704, tipo: "COLETOR_RECICLAVEL" },
+  { id: 24, nome: "Praça da Ilha do Guajiru", latitude: -2.880495, longitude: -39.910261, tipo: "COLETOR_RECICLAVEL" },
+  { id: 25, nome: "Rua Via Costeira", latitude: -2.881416, longitude: -39.908521, tipo: "COLETOR_RECICLAVEL" },
+  { id: 26, nome: "Torrões", latitude: -2.950707, longitude: -39.797917, tipo: "COLETOR_RECICLAVEL" },
+  { id: 101, nome: "Prefeitura Municipal de Itarema", latitude: -2.920012, longitude: -39.915818, tipo: "ILHA_ECOLOGICA" },
+  { id: 102, nome: "Praça dos Feirantes", latitude: -2.922933, longitude: -39.913803, tipo: "ILHA_ECOLOGICA" },
+  { id: 103, nome: "Centro de Atendimento ao Turista – CAT (Ilha do Guajiru)", latitude: -2.880735, longitude: -39.910581, tipo: "ILHA_ECOLOGICA" },
+];
+
+// Limites de segurança. A decisão final do GPS é adaptativa nas funções abaixo.
+const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 170;
+const GPS_MAX_FIRST_ACCURACY_METERS = 200;
+const GPS_HISTORY_SIZE = 5;
+const GPS_MIN_RELEVANT_MOVE_METERS = 1.5;
+const GPS_RECENT_WINDOW_MS = 35000;
+const GPS_NEAR_DESTINATION_METERS = 50;
+const GPS_FAR_FROM_DESTINATION_METERS = 300;
+
+const TRACKING_MIN_MOVE_METERS = 8;
+const TRACKING_MIN_INTERVAL_MS = 7000;
+
+const ROUTE_RECALC_ORIGIN_METERS = 30;
+const ROUTE_RECALC_DESTINATION_METERS = 10;
+const ROUTE_MIN_INTERVAL_MS = 9000;
 
 function normalizarStatus(status?: string | null) {
   return String(status || "").trim().toUpperCase();
@@ -124,9 +186,12 @@ function formatarDistancia(metros?: number | null) {
 function materiaisTexto(materiais?: string | string[] | null) {
   if (!materiais) return "Material não informado";
   if (Array.isArray(materiais)) return materiais.join(", ") || "Material não informado";
-  return String(materiais).split(",").map((m) => m.trim()).filter(Boolean).join(", ") || "Material não informado";
+  return String(materiais)
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean)
+    .join(", ") || "Material não informado";
 }
-
 
 function emailDoColetor(item: DoacaoMapaItem) {
   return String(item.coletorEmail || item.coletor?.email || "").trim().toLowerCase();
@@ -220,18 +285,253 @@ function extrairLista(payload: any): DoacaoMapaItem[] {
   return [];
 }
 
-export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAcaoPrincipal }: Props) {
+function posicaoParaLocalizacaoGPS(posicao: Location.LocationObject): LocalizacaoGPS | null {
+  const latitude = posicao.coords.latitude;
+  const longitude = posicao.coords.longitude;
+
+  if (!coordenadaValida(latitude, longitude)) return null;
+
+  return {
+    latitude,
+    longitude,
+    accuracy: posicao.coords.accuracy,
+    speed: posicao.coords.speed,
+    timestamp: posicao.timestamp || Date.now(),
+  };
+}
+
+function limitarNumero(valor: number, minimo: number, maximo: number) {
+  return Math.min(maximo, Math.max(minimo, valor));
+}
+
+function normalizarPrecisao(accuracy?: number | null) {
+  const valor = Number(accuracy);
+  return Number.isFinite(valor) && valor > 0 ? valor : null;
+}
+
+function calcularPesoDinamico(accuracy?: number | null, distancia = 0, segundos = 1) {
+  const precisao = normalizarPrecisao(accuracy);
+  const velocidade = segundos > 0 ? distancia / segundos : 0;
+
+  let peso = 0.35;
+
+  if (precisao === null) peso = 0.3;
+  else if (precisao <= 10) peso = 0.9;
+  else if (precisao <= 20) peso = 0.75;
+  else if (precisao <= 40) peso = 0.58;
+  else if (precisao <= 80) peso = 0.38;
+  else if (precisao <= 130) peso = 0.22;
+  else peso = 0.12;
+
+  // Em deslocamento real mais rápido, a bolinha precisa acompanhar melhor.
+  if (velocidade >= 12 && precisao !== null && precisao <= 60) peso += 0.12;
+  if (velocidade >= 22 && precisao !== null && precisao <= 35) peso += 0.1;
+
+  return limitarNumero(peso, 0.12, 0.92);
+}
+
+function calcularVelocidadeMaximaDinamica(accuracy?: number | null, historico: LocalizacaoGPS[] = []) {
+  const precisao = normalizarPrecisao(accuracy);
+  const historicoRecente = historico.filter((p) => Date.now() - p.timestamp <= GPS_RECENT_WINDOW_MS);
+  const temHistoricoBom = historicoRecente.some((p) => {
+    const pAccuracy = normalizarPrecisao(p.accuracy);
+    return pAccuracy !== null && pAccuracy <= 40;
+  });
+
+  let velocidadeMaxima = 24; // 86 km/h quando não sabemos a precisão.
+
+  if (precisao === null) velocidadeMaxima = 24;
+  else if (precisao <= 15) velocidadeMaxima = 45; // GPS ótimo: aceita carro/moto em avenida.
+  else if (precisao <= 35) velocidadeMaxima = 38;
+  else if (precisao <= 70) velocidadeMaxima = 30;
+  else if (precisao <= 120) velocidadeMaxima = 20;
+  else velocidadeMaxima = 12;
+
+  if (temHistoricoBom) velocidadeMaxima += 5;
+
+  return velocidadeMaxima;
+}
+
+function calcularLimiteSaltoDinamico(accuracy: number | null, segundos: number, velocidadeMaxima: number) {
+  const precisao = accuracy ?? 80;
+  const porPrecisao = precisao * 2.4;
+  const porTempo = velocidadeMaxima * Math.max(segundos, 1) * 1.15;
+  return limitarNumero(Math.max(70, porPrecisao, porTempo), 70, 650);
+}
+
+function mediaHistoricoPonderada(historico: LocalizacaoGPS[]): Coordenada | null {
+  const recentes = historico
+    .filter((p) => Date.now() - p.timestamp <= GPS_RECENT_WINDOW_MS)
+    .slice(-GPS_HISTORY_SIZE);
+
+  if (!recentes.length) return null;
+
+  let somaPeso = 0;
+  let somaLat = 0;
+  let somaLng = 0;
+
+  recentes.forEach((p, index) => {
+    const precisao = normalizarPrecisao(p.accuracy) ?? 80;
+    const pesoRecencia = index + 1;
+    const pesoPrecisao = 1 / Math.max(precisao, 8);
+    const peso = pesoRecencia * pesoPrecisao;
+
+    somaPeso += peso;
+    somaLat += p.latitude * peso;
+    somaLng += p.longitude * peso;
+  });
+
+  if (somaPeso <= 0) return null;
+
+  return {
+    latitude: somaLat / somaPeso,
+    longitude: somaLng / somaPeso,
+  };
+}
+
+function suavizarCoordenadaDinamica(
+  anterior: Coordenada,
+  nova: LocalizacaoGPS,
+  historico: LocalizacaoGPS[]
+): Coordenada {
+  const distancia = calcularDistanciaMetros(anterior, nova);
+  const ultimo = historico[historico.length - 1];
+  const segundos = ultimo ? Math.max((nova.timestamp - ultimo.timestamp) / 1000, 1) : 1;
+  const peso = calcularPesoDinamico(nova.accuracy, distancia, segundos);
+
+  const suavizada = {
+    latitude: anterior.latitude + (nova.latitude - anterior.latitude) * peso,
+    longitude: anterior.longitude + (nova.longitude - anterior.longitude) * peso,
+  };
+
+  const media = mediaHistoricoPonderada(historico);
+  const precisao = normalizarPrecisao(nova.accuracy);
+
+  // Se o GPS está médio/ruim, puxa um pouco para o histórico recente para evitar zigue-zague.
+  if (media && precisao !== null && precisao > 45) {
+    const pesoHistorico = precisao > 100 ? 0.35 : 0.22;
+    return {
+      latitude: suavizada.latitude * (1 - pesoHistorico) + media.latitude * pesoHistorico,
+      longitude: suavizada.longitude * (1 - pesoHistorico) + media.longitude * pesoHistorico,
+    };
+  }
+
+  return suavizada;
+}
+
+function deveIgnorarLocalizacao(
+  anterior: LocalizacaoGPS | null,
+  nova: LocalizacaoGPS,
+  destino: Coordenada | null,
+  historico: LocalizacaoGPS[]
+) {
+  const precisao = normalizarPrecisao(nova.accuracy);
+  const limiteInicial = GPS_MAX_FIRST_ACCURACY_METERS;
+  const limiteNormal = GPS_MAX_ACCEPTABLE_ACCURACY_METERS;
+
+  if (!anterior) {
+    return precisao !== null && precisao > limiteInicial;
+  }
+
+  if (precisao !== null && precisao > limiteNormal) {
+    return true;
+  }
+
+  const distancia = calcularDistanciaMetros(anterior, nova);
+  if (distancia < GPS_MIN_RELEVANT_MOVE_METERS) return true;
+
+  const segundos = Math.max((nova.timestamp - anterior.timestamp) / 1000, 1);
+  const velocidadeCalculada = distancia / segundos;
+  const velocidadeInformada = Number(nova.speed);
+  const velocidadeMaxima = calcularVelocidadeMaximaDinamica(nova.accuracy, historico);
+  const limiteSalto = calcularLimiteSaltoDinamico(precisao, segundos, velocidadeMaxima);
+
+  const media = mediaHistoricoPonderada(historico);
+  const distanciaDaMedia = media ? calcularDistanciaMetros(media, nova) : 0;
+
+  // Se o ponto está muito longe do histórico e a precisão não está boa, é quase sempre teleporte.
+  if (media && precisao !== null && precisao > 45 && distanciaDaMedia > limiteSalto) {
+    return true;
+  }
+
+  // Bloqueia velocidade impossível de acordo com a precisão atual e o histórico recente.
+  if (velocidadeCalculada > velocidadeMaxima && distancia > limiteSalto) {
+    return true;
+  }
+
+  // Alguns aparelhos informam speed direto do GPS. Se vier absurdo e a precisão não estiver ótima, ignora.
+  if (
+    Number.isFinite(velocidadeInformada) &&
+    velocidadeInformada > velocidadeMaxima + 8 &&
+    (precisao === null || precisao > 20)
+  ) {
+    return true;
+  }
+
+  if (destino) {
+    const distanciaAntigaAteDestino = calcularDistanciaMetros(anterior, destino);
+    const distanciaNovaAteDestino = calcularDistanciaMetros(nova, destino);
+    const pulouMuitoParaPertoDaDoacao =
+      distanciaAntigaAteDestino > GPS_FAR_FROM_DESTINATION_METERS &&
+      distanciaNovaAteDestino < GPS_NEAR_DESTINATION_METERS &&
+      distancia > Math.max(120, limiteSalto * 0.7) &&
+      velocidadeCalculada > Math.min(velocidadeMaxima, 22);
+
+    if (pulouMuitoParaPertoDaDoacao) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function atualizarHistoricoLocalizacao(historico: LocalizacaoGPS[], nova: LocalizacaoGPS) {
+  return [...historico, nova]
+    .filter((p) => nova.timestamp - p.timestamp <= GPS_RECENT_WINDOW_MS)
+    .slice(-GPS_HISTORY_SIZE);
+}
+
+function precisaRecalcularRota(
+  ultima: { origem: Coordenada; destino: Coordenada; timestamp: number } | null,
+  origem: Coordenada,
+  destino: Coordenada
+) {
+  if (!ultima) return true;
+
+  const agora = Date.now();
+  const tempoDesdeUltima = agora - ultima.timestamp;
+  const origemMudou = calcularDistanciaMetros(ultima.origem, origem);
+  const destinoMudou = calcularDistanciaMetros(ultima.destino, destino);
+
+  return (
+    tempoDesdeUltima >= ROUTE_MIN_INTERVAL_MS &&
+    (origemMudou >= ROUTE_RECALC_ORIGIN_METERS || destinoMudou >= ROUTE_RECALC_DESTINATION_METERS)
+  );
+}
+
+export default function MapaHome({
+  tipoUsuario: tipoUsuarioProp = "DOADOR",
+  onAcaoPrincipal,
+  menuOpen = false,
+}: Props) {
   const cameraRef = useRef<any>(null);
   const mountedRef = useRef(true);
-  const ultimaLocalizacaoEnviadaRef = useRef<Coordenada | null>(null);
+  const ultimaLocalizacaoGPSRef = useRef<LocalizacaoGPS | null>(null);
+  const historicoLocalizacaoRef = useRef<LocalizacaoGPS[]>([]);
+  const ultimaLocalizacaoEnviadaRef = useRef<{ coordenada: Coordenada; timestamp: number } | null>(null);
   const ultimoAutoCenterIdRef = useRef<string | number | null>(null);
+  const ultimaRotaRef = useRef<{ origem: Coordenada; destino: Coordenada; timestamp: number } | null>(null);
+  const rotaAbortRef = useRef<AbortController | null>(null);
 
   const [tipoUsuario, setTipoUsuario] = useState<TipoUsuario>(tipoUsuarioProp);
   const [emailUsuario, setEmailUsuario] = useState("");
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
   const [minhaLocalizacao, setMinhaLocalizacao] = useState<Coordenada | null>(null);
+  const [precisaoGPS, setPrecisaoGPS] = useState<number | null>(null);
   const [doacoes, setDoacoes] = useState<DoacaoMapaItem[]>([]);
   const [doacaoSelecionadaId, setDoacaoSelecionadaId] = useState<number | null>(null);
+  const [pontoColetaSelecionadoId, setPontoColetaSelecionadoId] = useState<number | null>(null);
+  const [rotaGeoJSON, setRotaGeoJSON] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [processandoAcao, setProcessandoAcao] = useState(false);
@@ -240,6 +540,7 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      rotaAbortRef.current?.abort();
     };
   }, []);
 
@@ -300,59 +601,6 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
     };
   }, [carregarDoacoes]);
 
-  useEffect(() => {
-    let subscription: Location.LocationSubscription | null = null;
-
-    async function iniciarLocalizacao() {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-
-        if (status !== "granted") {
-          setErro("Permita o acesso à localização para o mapa funcionar.");
-          setLoading(false);
-          return;
-        }
-
-        const atual = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        if (mountedRef.current) {
-          setMinhaLocalizacao({
-            latitude: atual.coords.latitude,
-            longitude: atual.coords.longitude,
-          });
-        }
-
-        subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.Balanced,
-            timeInterval: 5000,
-            distanceInterval: 5,
-          },
-          (posicao) => {
-            if (!mountedRef.current) return;
-            setMinhaLocalizacao({
-              latitude: posicao.coords.latitude,
-              longitude: posicao.coords.longitude,
-            });
-          }
-        );
-      } catch {
-        if (mountedRef.current) {
-          setErro("Não foi possível obter sua localização.");
-          setLoading(false);
-        }
-      }
-    }
-
-    iniciarLocalizacao();
-
-    return () => {
-      if (subscription) subscription.remove();
-    };
-  }, []);
-
   const minhasColetas = useMemo(() => {
     if (tipoUsuario !== "COLETOR") return [];
 
@@ -389,6 +637,115 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
   }, [doacaoSelecionadaId, doacoes, minhasColetas, tipoUsuario]);
 
   const destino = useMemo(() => toCoordenada(doacaoAtiva), [doacaoAtiva]);
+  const pontoColetaSelecionado = useMemo(
+    () => PONTOS_COLETA_SELETIVA.find((ponto) => ponto.id === pontoColetaSelecionadoId) || null,
+    [pontoColetaSelecionadoId]
+  );
+  const destinoRef = useRef<Coordenada | null>(null);
+
+  useEffect(() => {
+    destinoRef.current = destino;
+  }, [destino]);
+
+  useEffect(() => {
+    if (!doacaoSelecionadaId) return;
+
+    const aindaExiste = doacoes.some((item) => item.id === doacaoSelecionadaId);
+
+    if (!aindaExiste) {
+      setDoacaoSelecionadaId(null);
+    }
+  }, [doacoes, doacaoSelecionadaId]);
+
+  const aplicarLocalizacao = useCallback((nova: LocalizacaoGPS) => {
+    const anterior = ultimaLocalizacaoGPSRef.current;
+    const destinoAtual = destinoRef.current;
+    const historicoAtual = historicoLocalizacaoRef.current;
+
+    if (deveIgnorarLocalizacao(anterior, nova, destinoAtual, historicoAtual)) {
+      return;
+    }
+
+    const coordenadaFinal: Coordenada = anterior
+      ? suavizarCoordenadaDinamica(anterior, nova, historicoAtual)
+      : { latitude: nova.latitude, longitude: nova.longitude };
+
+    const aceita: LocalizacaoGPS = {
+      ...nova,
+      latitude: coordenadaFinal.latitude,
+      longitude: coordenadaFinal.longitude,
+    };
+
+    ultimaLocalizacaoGPSRef.current = aceita;
+    historicoLocalizacaoRef.current = atualizarHistoricoLocalizacao(historicoAtual, aceita);
+
+    if (mountedRef.current) {
+      setMinhaLocalizacao(coordenadaFinal);
+      setPrecisaoGPS(normalizarPrecisao(nova.accuracy));
+    }
+  }, []);
+
+  useEffect(() => {
+    let subscription: Location.LocationSubscription | null = null;
+    let cancelado = false;
+
+    async function iniciarLocalizacao() {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+
+        if (status !== "granted") {
+          setErro("Permita o acesso à localização para o mapa funcionar.");
+          setLoading(false);
+          return;
+        }
+
+        const ultimaConhecida = await Location.getLastKnownPositionAsync({
+          maxAge: 10000,
+          requiredAccuracy: GPS_MAX_FIRST_ACCURACY_METERS,
+        });
+
+        if (!cancelado && ultimaConhecida) {
+          const gps = posicaoParaLocalizacaoGPS(ultimaConhecida);
+          if (gps) aplicarLocalizacao(gps);
+        }
+
+        const atual = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Highest,
+        });
+
+        if (!cancelado) {
+          const gps = posicaoParaLocalizacaoGPS(atual);
+          if (gps) aplicarLocalizacao(gps);
+        }
+
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Highest,
+            timeInterval: 2500,
+            distanceInterval: 2,
+            mayShowUserSettingsDialog: true,
+          },
+          (posicao) => {
+            if (!mountedRef.current || cancelado) return;
+            const gps = posicaoParaLocalizacaoGPS(posicao);
+            if (gps) aplicarLocalizacao(gps);
+          }
+        );
+      } catch {
+        if (mountedRef.current) {
+          setErro("Não foi possível obter sua localização.");
+          setLoading(false);
+        }
+      }
+    }
+
+    iniciarLocalizacao();
+
+    return () => {
+      cancelado = true;
+      if (subscription) subscription.remove();
+    };
+  }, [aplicarLocalizacao]);
 
   const distanciaAteDestino = useMemo(() => {
     if (!minhaLocalizacao || !destino) return null;
@@ -403,14 +760,20 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
       if (!["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(status)) return;
 
       const ultima = ultimaLocalizacaoEnviadaRef.current;
-      if (ultima && calcularDistanciaMetros(ultima, minhaLocalizacao) < 8) return;
+      const agora = Date.now();
+      const mudouDistancia = ultima
+        ? calcularDistanciaMetros(ultima.coordenada, minhaLocalizacao)
+        : Number.POSITIVE_INFINITY;
+      const passouTempo = ultima ? agora - ultima.timestamp >= TRACKING_MIN_INTERVAL_MS : true;
+
+      if (ultima && mudouDistancia < TRACKING_MIN_MOVE_METERS && !passouTempo) return;
 
       try {
         await api.post(`/rastreamento/${doacaoAtiva.id}/coletor`, {
           latitude: minhaLocalizacao.latitude,
           longitude: minhaLocalizacao.longitude,
         });
-        ultimaLocalizacaoEnviadaRef.current = minhaLocalizacao;
+        ultimaLocalizacaoEnviadaRef.current = { coordenada: minhaLocalizacao, timestamp: agora };
       } catch {
         // O mapa continua funcionando mesmo se o envio de rastreamento falhar.
       }
@@ -418,6 +781,115 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
 
     enviarLocalizacaoColetor();
   }, [doacaoAtiva, minhaLocalizacao, tipoUsuario]);
+
+  useEffect(() => {
+    async function buscarRotaMapbox() {
+      if (!mapboxToken || !minhaLocalizacao || !destino) {
+        setRotaGeoJSON(null);
+        ultimaRotaRef.current = null;
+        rotaAbortRef.current?.abort();
+        return;
+      }
+
+      if (!precisaRecalcularRota(ultimaRotaRef.current, minhaLocalizacao, destino)) {
+        return;
+      }
+
+      rotaAbortRef.current?.abort();
+      const controller = new AbortController();
+      rotaAbortRef.current = controller;
+
+      try {
+        const origem = `${minhaLocalizacao.longitude},${minhaLocalizacao.latitude}`;
+        const fim = `${destino.longitude},${destino.latitude}`;
+        const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origem};${fim}?geometries=geojson&overview=full&alternatives=false&steps=false&access_token=${mapboxToken}`;
+
+        const response = await fetch(url, { signal: controller.signal });
+
+        if (!response.ok) {
+          throw new Error("Erro ao buscar rota no Mapbox");
+        }
+
+        const data = await response.json();
+        const coordinates = data?.routes?.[0]?.geometry?.coordinates;
+
+        if (!mountedRef.current || controller.signal.aborted) return;
+
+        if (Array.isArray(coordinates) && coordinates.length >= 2) {
+          setRotaGeoJSON({
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: {
+                  type: "LineString",
+                  coordinates,
+                },
+                properties: {},
+              },
+            ],
+          });
+          ultimaRotaRef.current = {
+            origem: minhaLocalizacao,
+            destino,
+            timestamp: Date.now(),
+          };
+        } else {
+          // Mantém a última rota válida para evitar piscadas ou troca brusca para linha reta.
+        }
+      } catch (error: any) {
+        if (error?.name !== "AbortError" && mountedRef.current) {
+          // Mantém a última rota válida se a API falhar temporariamente.
+        }
+      }
+    }
+
+    buscarRotaMapbox();
+  }, [destino, minhaLocalizacao]);
+
+  const linhaFeature = useMemo(() => {
+    if (rotaGeoJSON) return rotaGeoJSON;
+    if (!minhaLocalizacao || !destino) return null;
+
+    // Fallback visual quando a API de rota não responder.
+    return {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          geometry: {
+            type: "LineString" as const,
+            coordinates: [
+              [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
+              [destino.longitude, destino.latitude],
+            ],
+          },
+          properties: {},
+        },
+      ],
+    };
+  }, [destino, minhaLocalizacao, rotaGeoJSON]);
+
+  const pontosColetaFeature = useMemo(() => {
+    return {
+      type: "FeatureCollection" as const,
+      features: PONTOS_COLETA_SELETIVA.map((ponto) => ({
+        type: "Feature" as const,
+        id: `ponto-coleta-${ponto.id}`,
+        geometry: {
+          type: "Point" as const,
+          coordinates: [ponto.longitude, ponto.latitude],
+        },
+        properties: {
+          id: ponto.id,
+          nome: ponto.nome,
+          tipo: ponto.tipo,
+          icone: "♻",
+          selecionado: ponto.id === pontoColetaSelecionadoId,
+        },
+      })),
+    };
+  }, [pontoColetaSelecionadoId]);
 
   const pointsFeature = useMemo(() => {
     const features = doacoes.map((item) => ({
@@ -456,27 +928,6 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
     };
   }, [doacaoAtiva?.id, doacoes, minhaLocalizacao]);
 
-  const linhaFeature = useMemo(() => {
-    if (!minhaLocalizacao || !destino) return null;
-
-    return {
-      type: "FeatureCollection" as const,
-      features: [
-        {
-          type: "Feature" as const,
-          geometry: {
-            type: "LineString" as const,
-            coordinates: [
-              [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
-              [destino.longitude, destino.latitude],
-            ],
-          },
-          properties: {},
-        },
-      ],
-    };
-  }, [destino, minhaLocalizacao]);
-
   const centralizarMapa = useCallback(() => {
     if (!cameraRef.current) return;
 
@@ -484,7 +935,7 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
       cameraRef.current.fitBounds(
         [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
         [destino.longitude, destino.latitude],
-        [80, 60, 260, 60],
+        [90, 70, 280, 70],
         700
       );
       return;
@@ -508,7 +959,6 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
     const timeout = setTimeout(centralizarMapa, 400);
     return () => clearTimeout(timeout);
   }, [centralizarMapa, loading, doacaoAtiva?.id]);
-
 
   async function confirmarColetaDoDoador() {
     if (!doacaoAtiva?.id || processandoAcao) return;
@@ -539,13 +989,24 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
     const feature = event?.features?.[0];
     const id = Number(feature?.properties?.id);
     if (Number.isFinite(id) && id > 0) {
+      setPontoColetaSelecionadoId(null);
       setDoacaoSelecionadaId(id);
+    }
+  }
+
+  function handlePressPontoColeta(event: any) {
+    const feature = event?.features?.[0];
+    const id = Number(feature?.properties?.id);
+    if (Number.isFinite(id) && id > 0) {
+      setPontoColetaSelecionadoId(id);
     }
   }
 
   const tituloBotao = tipoUsuario === "COLETOR" ? "Ver coletas" : "Fazer doação";
   const textoLocalizacao = minhaLocalizacao
-    ? "Sua localização está ativa"
+    ? precisaoGPS !== null
+      ? `Sua localização está ativa • precisão ±${Math.round(precisaoGPS)} m`
+      : "Sua localização está ativa"
     : "Buscando sua localização...";
 
   if (!mapboxToken) {
@@ -561,7 +1022,13 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
 
   return (
     <View style={styles.container}>
-      <Mapbox.MapView style={styles.map} styleURL={Mapbox.StyleURL.Street}>
+      <Mapbox.MapView
+        style={styles.map}
+        styleURL={Mapbox.StyleURL.Street}
+        logoEnabled={false}
+        compassEnabled
+        scaleBarEnabled={false}
+      >
         <Mapbox.Camera
           ref={cameraRef}
           zoomLevel={13}
@@ -585,6 +1052,34 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
             />
           </Mapbox.ShapeSource>
         )}
+
+        <Mapbox.ShapeSource id="pontos-coleta-seletiva" shape={pontosColetaFeature as any} onPress={handlePressPontoColeta}>
+          <Mapbox.CircleLayer
+            id="pontos-coleta-seletiva-base"
+            style={{
+              circleRadius: ["case", ["==", ["get", "selecionado"], true], 15, 12],
+              circleColor: [
+                "case",
+                ["==", ["get", "tipo"], "ILHA_ECOLOGICA"],
+                "#15803d",
+                "#16a34a",
+              ],
+              circleOpacity: 0.95,
+              circleStrokeWidth: ["case", ["==", ["get", "selecionado"], true], 4, 2],
+              circleStrokeColor: "#ffffff",
+            }}
+          />
+          <Mapbox.SymbolLayer
+            id="pontos-coleta-seletiva-icone"
+            style={{
+              textField: ["get", "icone"],
+              textSize: ["case", ["==", ["get", "selecionado"], true], 18, 15],
+              textColor: "#ffffff",
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+            }}
+          />
+        </Mapbox.ShapeSource>
 
         <Mapbox.ShapeSource id="pontos-doacoes" shape={pointsFeature as any} onPress={handlePressDoacao}>
           <Mapbox.CircleLayer
@@ -615,71 +1110,92 @@ export default function MapaHome({ tipoUsuario: tipoUsuarioProp = "DOADOR", onAc
         </Mapbox.ShapeSource>
       </Mapbox.MapView>
 
-      <View style={styles.topCard}>
-        <Text style={styles.topTitle}>Mapa Recicle+</Text>
-        <Text style={styles.topText}>{textoLocalizacao}</Text>
-        {!!erro && <Text style={styles.errorInline}>{erro}</Text>}
-      </View>
+      {!menuOpen && (
+        <View style={styles.topCard}>
+          <Text style={styles.topTitle}>Mapa Recicle+</Text>
+          <Text style={styles.topText}>{textoLocalizacao}</Text>
+          {!!erro && <Text style={styles.errorInline}>{erro}</Text>}
+        </View>
+      )}
 
-      <View style={styles.infoCard}>
-        {loading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color="#16a34a" />
-            <Text style={styles.infoText}>Carregando doações...</Text>
-          </View>
-        ) : doacaoAtiva ? (
-          <>
-            <Text style={styles.infoTitle}>{materiaisTexto(doacaoAtiva.materiais)}</Text>
-            <Text style={styles.infoText}>Status: {statusLabel(doacaoAtiva.status)}</Text>
-            <Text style={styles.infoText}>
-              Local: {[doacaoAtiva.rua, doacaoAtiva.numero, doacaoAtiva.bairro, doacaoAtiva.cidade]
-                .filter(Boolean)
-                .join(", ") || "Localização marcada no mapa"}
-            </Text>
-            {distanciaAteDestino !== null && (
-              <Text style={styles.infoText}>Distância aproximada: {formatarDistancia(distanciaAteDestino)}</Text>
-            )}
-            <Text style={styles.hintText}>
-              Toque em outro ponto do mapa para selecionar outra doação.
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.infoTitle}>Nenhuma doação ativa no mapa</Text>
-            <Text style={styles.infoText}>
-              Quando houver doações com localização, elas aparecerão aqui.
-            </Text>
-          </>
-        )}
-
-        {tipoUsuario === "DOADOR" &&
-          normalizarStatus(doacaoAtiva?.status) === "AGUARDANDO_CONFIRMACAO" && (
-            <TouchableOpacity
-              style={[styles.confirmButton, processandoAcao && styles.disabledButton]}
-              onPress={confirmarColetaDoDoador}
-              disabled={processandoAcao}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.confirmButtonText}>
-                {processandoAcao ? "Confirmando..." : "Confirmar coleta realizada"}
+      {!menuOpen && (
+        <View style={styles.infoCard}>
+          {loading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color="#16a34a" />
+              <Text style={styles.infoText}>Carregando doações...</Text>
+            </View>
+          ) : pontoColetaSelecionado ? (
+            <>
+              <Text style={styles.infoTitle}>♻ {pontoColetaSelecionado.nome}</Text>
+              <Text style={styles.infoText}>
+                Tipo: {pontoColetaSelecionado.tipo === "ILHA_ECOLOGICA" ? "Ilha ecológica" : "Coletor de recicláveis"}
               </Text>
-            </TouchableOpacity>
+              <Text style={styles.infoText}>
+                Coordenadas: {pontoColetaSelecionado.latitude.toFixed(6)}, {pontoColetaSelecionado.longitude.toFixed(6)}
+              </Text>
+              <Text style={styles.hintText}>
+                Ponto fixo de coleta seletiva. Toque em uma doação para voltar aos detalhes da coleta.
+              </Text>
+            </>
+          ) : doacaoAtiva ? (
+            <>
+              <Text style={styles.infoTitle}>{materiaisTexto(doacaoAtiva.materiais)}</Text>
+              <Text style={styles.infoText}>Status: {statusLabel(doacaoAtiva.status)}</Text>
+              <Text style={styles.infoText}>
+                Local: {[doacaoAtiva.rua, doacaoAtiva.numero, doacaoAtiva.bairro, doacaoAtiva.cidade]
+                  .filter(Boolean)
+                  .join(", ") || "Localização marcada no mapa"}
+              </Text>
+              {distanciaAteDestino !== null && (
+                <Text style={styles.infoText}>Distância aproximada: {formatarDistancia(distanciaAteDestino)}</Text>
+              )}
+              <Text style={styles.hintText}>
+                Toque em outro ponto do mapa para selecionar outra doação ou em ♻ para ver um ponto de coleta seletiva.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.infoTitle}>Nenhuma doação ativa no mapa</Text>
+              <Text style={styles.infoText}>
+                Quando houver doações com localização, elas aparecerão aqui. Os pontos ♻ são locais fixos de coleta seletiva.
+              </Text>
+            </>
           )}
 
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.secondaryButton} onPress={centralizarMapa} activeOpacity={0.85}>
-            <Text style={styles.secondaryButtonText}>Centralizar</Text>
-          </TouchableOpacity>
+          {tipoUsuario === "DOADOR" &&
+            normalizarStatus(doacaoAtiva?.status) === "AGUARDANDO_CONFIRMACAO" && (
+              <TouchableOpacity
+                style={[styles.confirmButton, processandoAcao && styles.disabledButton]}
+                onPress={confirmarColetaDoDoador}
+                disabled={processandoAcao}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.confirmButtonText}>
+                  {processandoAcao ? "Confirmando..." : "Confirmar coleta realizada"}
+                </Text>
+              </TouchableOpacity>
+            )}
 
-          <TouchableOpacity
-            style={styles.mainButton}
-            onPress={() => (onAcaoPrincipal ? onAcaoPrincipal() : router.push(tipoUsuario === "COLETOR" ? "/coletas" : "/doacao"))}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.mainButtonText}>{tituloBotao}</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.secondaryButton} onPress={centralizarMapa} activeOpacity={0.85}>
+              <Text style={styles.secondaryButtonText}>Centralizar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.mainButton}
+              onPress={() =>
+                onAcaoPrincipal
+                  ? onAcaoPrincipal()
+                  : router.push(tipoUsuario === "COLETOR" ? "/coletas" : "/doacao")
+              }
+              activeOpacity={0.85}
+            >
+              <Text style={styles.mainButtonText}>{tituloBotao}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 }
