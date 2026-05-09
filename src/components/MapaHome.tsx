@@ -65,6 +65,17 @@ type PontoColetaSeletiva = {
   tipo: "COLETOR_RECICLAVEL" | "ILHA_ECOLOGICA";
 };
 
+type RastreamentoDoacaoResponse = {
+  latitudeColetor?: number | string | null;
+  longitudeColetor?: number | string | null;
+  coletorLatitude?: number | string | null;
+  coletorLongitude?: number | string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  status?: string | null;
+  data?: RastreamentoDoacaoResponse;
+};
+
 type ApiResponse<T> = {
   success?: boolean;
   message?: string;
@@ -283,6 +294,19 @@ function extrairLista(payload: any): DoacaoMapaItem[] {
   if (Array.isArray(payload?.content)) return payload.content;
   if (Array.isArray(payload?.doacoes)) return payload.doacoes;
   return [];
+}
+
+function extrairCoordenadaColetor(payload: any): Coordenada | null {
+  const data = payload?.data ?? payload;
+  const latitude = data?.latitudeColetor ?? data?.coletorLatitude ?? data?.latitude;
+  const longitude = data?.longitudeColetor ?? data?.coletorLongitude ?? data?.longitude;
+
+  if (!coordenadaValida(latitude, longitude)) return null;
+
+  return {
+    latitude: Number(latitude),
+    longitude: Number(longitude),
+  };
 }
 
 function posicaoParaLocalizacaoGPS(posicao: Location.LocationObject): LocalizacaoGPS | null {
@@ -527,6 +551,7 @@ export default function MapaHome({
   const [emailUsuario, setEmailUsuario] = useState("");
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
   const [minhaLocalizacao, setMinhaLocalizacao] = useState<Coordenada | null>(null);
+  const [localizacaoColetor, setLocalizacaoColetor] = useState<Coordenada | null>(null);
   const [precisaoGPS, setPrecisaoGPS] = useState<number | null>(null);
   const [doacoes, setDoacoes] = useState<DoacaoMapaItem[]>([]);
   const [doacaoSelecionadaId, setDoacaoSelecionadaId] = useState<number | null>(null);
@@ -637,6 +662,11 @@ export default function MapaHome({
   }, [doacaoSelecionadaId, doacoes, minhasColetas, tipoUsuario]);
 
   const destino = useMemo(() => toCoordenada(doacaoAtiva), [doacaoAtiva]);
+  const origemRota = useMemo(() => {
+    if (tipoUsuario === "DOADOR" && localizacaoColetor) return localizacaoColetor;
+    return minhaLocalizacao;
+  }, [localizacaoColetor, minhaLocalizacao, tipoUsuario]);
+
   const pontoColetaSelecionado = useMemo(
     () => PONTOS_COLETA_SELETIVA.find((ponto) => ponto.id === pontoColetaSelecionadoId) || null,
     [pontoColetaSelecionadoId]
@@ -656,6 +686,44 @@ export default function MapaHome({
       setDoacaoSelecionadaId(null);
     }
   }, [doacoes, doacaoSelecionadaId]);
+
+  useEffect(() => {
+    let cancelado = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    async function buscarLocalizacaoColetor() {
+      if (tipoUsuario !== "DOADOR" || !doacaoAtiva?.id) {
+        if (!cancelado) setLocalizacaoColetor(null);
+        return;
+      }
+
+      const status = normalizarStatus(doacaoAtiva.status);
+      if (!["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(status)) {
+        if (!cancelado) setLocalizacaoColetor(null);
+        return;
+      }
+
+      try {
+        const response = await api.get<RastreamentoDoacaoResponse>(`/rastreamento/${doacaoAtiva.id}`);
+        const coordenada = extrairCoordenadaColetor(response.data);
+
+        if (!cancelado) {
+          setLocalizacaoColetor(coordenada);
+        }
+      } catch {
+        // Se ainda não existir rastreamento para essa doação, apenas escondemos o marcador do coletor.
+        if (!cancelado) setLocalizacaoColetor(null);
+      }
+    }
+
+    buscarLocalizacaoColetor();
+    interval = setInterval(buscarLocalizacaoColetor, 5000);
+
+    return () => {
+      cancelado = true;
+      if (interval) clearInterval(interval);
+    };
+  }, [doacaoAtiva?.id, doacaoAtiva?.status, tipoUsuario]);
 
   const aplicarLocalizacao = useCallback((nova: LocalizacaoGPS) => {
     const anterior = ultimaLocalizacaoGPSRef.current;
@@ -748,9 +816,9 @@ export default function MapaHome({
   }, [aplicarLocalizacao]);
 
   const distanciaAteDestino = useMemo(() => {
-    if (!minhaLocalizacao || !destino) return null;
-    return calcularDistanciaMetros(minhaLocalizacao, destino);
-  }, [destino, minhaLocalizacao]);
+    if (!origemRota || !destino) return null;
+    return calcularDistanciaMetros(origemRota, destino);
+  }, [destino, origemRota]);
 
   useEffect(() => {
     async function enviarLocalizacaoColetor() {
@@ -784,14 +852,14 @@ export default function MapaHome({
 
   useEffect(() => {
     async function buscarRotaMapbox() {
-      if (!mapboxToken || !minhaLocalizacao || !destino) {
+      if (!mapboxToken || !origemRota || !destino) {
         setRotaGeoJSON(null);
         ultimaRotaRef.current = null;
         rotaAbortRef.current?.abort();
         return;
       }
 
-      if (!precisaRecalcularRota(ultimaRotaRef.current, minhaLocalizacao, destino)) {
+      if (!precisaRecalcularRota(ultimaRotaRef.current, origemRota, destino)) {
         return;
       }
 
@@ -800,7 +868,7 @@ export default function MapaHome({
       rotaAbortRef.current = controller;
 
       try {
-        const origem = `${minhaLocalizacao.longitude},${minhaLocalizacao.latitude}`;
+        const origem = `${origemRota.longitude},${origemRota.latitude}`;
         const fim = `${destino.longitude},${destino.latitude}`;
         const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origem};${fim}?geometries=geojson&overview=full&alternatives=false&steps=false&access_token=${mapboxToken}`;
 
@@ -830,7 +898,7 @@ export default function MapaHome({
             ],
           });
           ultimaRotaRef.current = {
-            origem: minhaLocalizacao,
+            origem: origemRota,
             destino,
             timestamp: Date.now(),
           };
@@ -845,11 +913,11 @@ export default function MapaHome({
     }
 
     buscarRotaMapbox();
-  }, [destino, minhaLocalizacao]);
+  }, [destino, origemRota]);
 
   const linhaFeature = useMemo(() => {
     if (rotaGeoJSON) return rotaGeoJSON;
-    if (!minhaLocalizacao || !destino) return null;
+    if (!origemRota || !destino) return null;
 
     // Fallback visual quando a API de rota não responder.
     return {
@@ -860,7 +928,7 @@ export default function MapaHome({
           geometry: {
             type: "LineString" as const,
             coordinates: [
-              [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
+              [origemRota.longitude, origemRota.latitude],
               [destino.longitude, destino.latitude],
             ],
           },
@@ -868,7 +936,7 @@ export default function MapaHome({
         },
       ],
     };
-  }, [destino, minhaLocalizacao, rotaGeoJSON]);
+  }, [destino, origemRota, rotaGeoJSON]);
 
   const pontosColetaFeature = useMemo(() => {
     return {
@@ -884,7 +952,7 @@ export default function MapaHome({
           id: ponto.id,
           nome: ponto.nome,
           tipo: ponto.tipo,
-          icone: "♻",
+          icone: "♻️",
           selecionado: ponto.id === pontoColetaSelecionadoId,
         },
       })),
@@ -903,6 +971,7 @@ export default function MapaHome({
         id: item.id,
         selecionada: item.id === doacaoAtiva?.id,
         status: normalizarStatus(item.status),
+        label: "",
       },
     }));
 
@@ -918,6 +987,24 @@ export default function MapaHome({
           id: -1,
           selecionada: false,
           status: "MINHA_LOCALIZACAO",
+          label: "",
+        },
+      });
+    }
+
+    if (tipoUsuario === "DOADOR" && localizacaoColetor) {
+      features.push({
+        type: "Feature" as const,
+        id: "coletor-em-rota",
+        geometry: {
+          type: "Point" as const,
+          coordinates: [localizacaoColetor.longitude, localizacaoColetor.latitude],
+        },
+        properties: {
+          id: -2,
+          selecionada: false,
+          status: "COLETOR_EM_ROTA",
+          label: "🚛",
         },
       });
     }
@@ -926,14 +1013,14 @@ export default function MapaHome({
       type: "FeatureCollection" as const,
       features,
     };
-  }, [doacaoAtiva?.id, doacoes, minhaLocalizacao]);
+  }, [doacaoAtiva?.id, doacoes, localizacaoColetor, minhaLocalizacao, tipoUsuario]);
 
   const centralizarMapa = useCallback(() => {
     if (!cameraRef.current) return;
 
-    if (minhaLocalizacao && destino) {
+    if (origemRota && destino) {
       cameraRef.current.fitBounds(
-        [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
+        [origemRota.longitude, origemRota.latitude],
         [destino.longitude, destino.latitude],
         [90, 70, 280, 70],
         700
@@ -941,13 +1028,13 @@ export default function MapaHome({
       return;
     }
 
-    const centro = minhaLocalizacao || destino || ITAREMA_CENTRO;
+    const centro = origemRota || minhaLocalizacao || destino || ITAREMA_CENTRO;
     cameraRef.current.setCamera({
       centerCoordinate: [centro.longitude, centro.latitude],
       zoomLevel: 14,
       animationDuration: 700,
     });
-  }, [destino, minhaLocalizacao]);
+  }, [destino, minhaLocalizacao, origemRota]);
 
   useEffect(() => {
     if (loading) return;
@@ -1004,9 +1091,11 @@ export default function MapaHome({
 
   const tituloBotao = tipoUsuario === "COLETOR" ? "Ver coletas" : "Fazer doação";
   const textoLocalizacao = minhaLocalizacao
-    ? precisaoGPS !== null
-      ? `Sua localização está ativa • precisão ±${Math.round(precisaoGPS)} m`
-      : "Sua localização está ativa"
+    ? tipoUsuario === "DOADOR" && localizacaoColetor
+      ? "Coletor em rota aparecendo no mapa"
+      : precisaoGPS !== null
+        ? `Sua localização está ativa • precisão ±${Math.round(precisaoGPS)} m`
+        : "Sua localização está ativa"
     : "Buscando sua localização...";
 
   if (!mapboxToken) {
@@ -1073,7 +1162,7 @@ export default function MapaHome({
             id="pontos-coleta-seletiva-icone"
             style={{
               textField: ["get", "icone"],
-              textSize: ["case", ["==", ["get", "selecionado"], true], 18, 15],
+              textSize: ["case", ["==", ["get", "selecionado"], true], 24, 20],
               textColor: "#ffffff",
               textAllowOverlap: true,
               textIgnorePlacement: true,
@@ -1087,6 +1176,8 @@ export default function MapaHome({
             style={{
               circleRadius: [
                 "case",
+                ["==", ["get", "status"], "COLETOR_EM_ROTA"],
+                13,
                 ["==", ["get", "status"], "MINHA_LOCALIZACAO"],
                 8,
                 ["==", ["get", "selecionada"], true],
@@ -1095,6 +1186,8 @@ export default function MapaHome({
               ],
               circleColor: [
                 "case",
+                ["==", ["get", "status"], "COLETOR_EM_ROTA"],
+                "#16a34a",
                 ["==", ["get", "status"], "MINHA_LOCALIZACAO"],
                 "#2563eb",
                 ["==", ["get", "status"], "PENDENTE"],
@@ -1105,6 +1198,15 @@ export default function MapaHome({
               ],
               circleStrokeWidth: 3,
               circleStrokeColor: "#ffffff",
+            }}
+          />
+          <Mapbox.SymbolLayer
+            id="pontos-doacoes-label"
+            style={{
+              textField: ["get", "label"],
+              textSize: 18,
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
             }}
           />
         </Mapbox.ShapeSource>
@@ -1148,7 +1250,17 @@ export default function MapaHome({
                   .join(", ") || "Localização marcada no mapa"}
               </Text>
               {distanciaAteDestino !== null && (
-                <Text style={styles.infoText}>Distância aproximada: {formatarDistancia(distanciaAteDestino)}</Text>
+                <Text style={styles.infoText}>
+                  {tipoUsuario === "DOADOR" && localizacaoColetor
+                    ? "Distância aproximada do coletor até sua casa: "
+                    : "Distância aproximada: "}
+                  {formatarDistancia(distanciaAteDestino)}
+                </Text>
+              )}
+              {tipoUsuario === "DOADOR" && ["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(normalizarStatus(doacaoAtiva.status)) && !localizacaoColetor && (
+                <Text style={styles.hintText}>
+                  O coletor aparecerá no mapa assim que o app dele enviar a localização.
+                </Text>
               )}
               <Text style={styles.hintText}>
                 Toque em outro ponto do mapa para selecionar outra doação ou em ♻ para ver um ponto de coleta seletiva.
@@ -1158,7 +1270,7 @@ export default function MapaHome({
             <>
               <Text style={styles.infoTitle}>Nenhuma doação ativa no mapa</Text>
               <Text style={styles.infoText}>
-                Quando houver doações com localização, elas aparecerão aqui. Os pontos ♻ são locais fixos de coleta seletiva.
+                Quando houver doações com localização, elas aparecerão aqui. Os pontos ♻️ são locais fixos de coleta seletiva.
               </Text>
             </>
           )}
