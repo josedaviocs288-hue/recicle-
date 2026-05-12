@@ -34,10 +34,11 @@ module.exports = {
 
     ios: {
       bundleIdentifier: "com.recicleplus.app",
-      supportsTablet: true,
+      supportsTablet: false,
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
           "Permitir que o Recicle+ acesse sua localização enquanto você usa o app.",
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
 

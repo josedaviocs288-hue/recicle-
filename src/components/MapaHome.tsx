@@ -938,27 +938,6 @@ export default function MapaHome({
     };
   }, [destino, origemRota, rotaGeoJSON]);
 
-  const pontosColetaFeature = useMemo(() => {
-    return {
-      type: "FeatureCollection" as const,
-      features: PONTOS_COLETA_SELETIVA.map((ponto) => ({
-        type: "Feature" as const,
-        id: `ponto-coleta-${ponto.id}`,
-        geometry: {
-          type: "Point" as const,
-          coordinates: [ponto.longitude, ponto.latitude],
-        },
-        properties: {
-          id: ponto.id,
-          nome: ponto.nome,
-          tipo: ponto.tipo,
-          icone: "♻️",
-          selecionado: ponto.id === pontoColetaSelecionadoId,
-        },
-      })),
-    };
-  }, [pontoColetaSelecionadoId]);
-
   const pointsFeature = useMemo(() => {
     const features = doacoes.map((item) => ({
       type: "Feature" as const,
@@ -1081,14 +1060,6 @@ export default function MapaHome({
     }
   }
 
-  function handlePressPontoColeta(event: any) {
-    const feature = event?.features?.[0];
-    const id = Number(feature?.properties?.id);
-    if (Number.isFinite(id) && id > 0) {
-      setPontoColetaSelecionadoId(id);
-    }
-  }
-
   const tituloBotao = tipoUsuario === "COLETOR" ? "Ver coletas" : "Fazer doação";
   const textoLocalizacao = minhaLocalizacao
     ? tipoUsuario === "DOADOR" && localizacaoColetor
@@ -1142,33 +1113,30 @@ export default function MapaHome({
           </Mapbox.ShapeSource>
         )}
 
-        <Mapbox.ShapeSource id="pontos-coleta-seletiva" shape={pontosColetaFeature as any} onPress={handlePressPontoColeta}>
-          <Mapbox.CircleLayer
-            id="pontos-coleta-seletiva-base"
-            style={{
-              circleRadius: ["case", ["==", ["get", "selecionado"], true], 15, 12],
-              circleColor: [
-                "case",
-                ["==", ["get", "tipo"], "ILHA_ECOLOGICA"],
-                "#15803d",
-                "#16a34a",
-              ],
-              circleOpacity: 0.95,
-              circleStrokeWidth: ["case", ["==", ["get", "selecionado"], true], 4, 2],
-              circleStrokeColor: "#ffffff",
-            }}
-          />
-          <Mapbox.SymbolLayer
-            id="pontos-coleta-seletiva-icone"
-            style={{
-              textField: ["get", "icone"],
-              textSize: ["case", ["==", ["get", "selecionado"], true], 24, 20],
-              textColor: "#ffffff",
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-            }}
-          />
-        </Mapbox.ShapeSource>
+        {/* CHAVE_RECICLAGEM_PONTOS_FIXOS_APARECE_NO_MAPA */}
+        {PONTOS_COLETA_SELETIVA.map((ponto) => (
+          <Mapbox.MarkerView
+            key={`ponto-fixo-${ponto.id}`}
+            id={`ponto-fixo-${ponto.id}`}
+            coordinate={[ponto.longitude, ponto.latitude]}
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                setPontoColetaSelecionadoId(ponto.id);
+                setDoacaoSelecionadaId(null);
+              }}
+              style={[
+                styles.recycleMarker,
+                ponto.id === pontoColetaSelecionadoId && styles.recycleMarkerSelected,
+                ponto.tipo === "ILHA_ECOLOGICA" && styles.recycleMarkerIlha,
+              ]}
+            >
+              <Text style={styles.recycleMarkerText}>♻️</Text>
+            </TouchableOpacity>
+          </Mapbox.MarkerView>
+        ))}
 
         <Mapbox.ShapeSource id="pontos-doacoes" shape={pointsFeature as any} onPress={handlePressDoacao}>
           <Mapbox.CircleLayer
@@ -1397,6 +1365,30 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontSize: 12,
     marginTop: 8,
+  },
+  recycleMarker: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#16a34a",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#ffffff",
+  },
+  recycleMarkerSelected: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#15803d",
+    borderWidth: 4,
+  },
+  recycleMarkerIlha: {
+    backgroundColor: "#15803d",
+  },
+  recycleMarkerText: {
+    fontSize: 20,
+    lineHeight: 24,
   },
   confirmButton: {
     marginTop: 12,
