@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Mapbox from "@rnmapbox/maps";
 import * as Location from "expo-location";
 import { router } from "expo-router";
@@ -140,6 +141,10 @@ const TRACKING_MIN_INTERVAL_MS = 7000;
 const ROUTE_RECALC_ORIGIN_METERS = 30;
 const ROUTE_RECALC_DESTINATION_METERS = 10;
 const ROUTE_MIN_INTERVAL_MS = 9000;
+
+const FOLLOW_COLLECTOR_CAMERA_MIN_MOVE_METERS = 4;
+const FOLLOW_COLLECTOR_CAMERA_MIN_INTERVAL_MS = 1500;
+const FOLLOW_COLLECTOR_CAMERA_ZOOM = 16;
 
 function normalizarStatus(status?: string | null) {
   return String(status || "").trim().toUpperCase();
@@ -543,7 +548,7 @@ export default function MapaHome({
   const ultimaLocalizacaoGPSRef = useRef<LocalizacaoGPS | null>(null);
   const historicoLocalizacaoRef = useRef<LocalizacaoGPS[]>([]);
   const ultimaLocalizacaoEnviadaRef = useRef<{ coordenada: Coordenada; timestamp: number } | null>(null);
-  const ultimoAutoCenterIdRef = useRef<string | number | null>(null);
+  const ultimaCameraSeguiuColetorRef = useRef<{ coordenada: Coordenada; timestamp: number } | null>(null);
   const ultimaRotaRef = useRef<{ origem: Coordenada; destino: Coordenada; timestamp: number } | null>(null);
   const rotaAbortRef = useRef<AbortController | null>(null);
 
@@ -560,6 +565,7 @@ export default function MapaHome({
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [processandoAcao, setProcessandoAcao] = useState(false);
+  const [seguirColetor, setSeguirColetor] = useState(tipoUsuarioProp === "COLETOR");
 
   useEffect(() => {
     mountedRef.current = true;
@@ -660,6 +666,27 @@ export default function MapaHome({
       null
     );
   }, [doacaoSelecionadaId, doacoes, minhasColetas, tipoUsuario]);
+
+  const statusDoacaoAtiva = normalizarStatus(doacaoAtiva?.status);
+  const coletorEmColetaAtiva =
+    tipoUsuario === "COLETOR" &&
+    ["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(statusDoacaoAtiva);
+
+  useEffect(() => {
+    if (tipoUsuario !== "COLETOR") {
+      setSeguirColetor(false);
+      ultimaCameraSeguiuColetorRef.current = null;
+      return;
+    }
+
+    if (coletorEmColetaAtiva) {
+      // CHAVE_SEGUIR_COLETOR_CONTROLE
+      // O acompanhamento começa ligado para o coletor, mas ele pode desligar no botão.
+      setSeguirColetor((valorAtual) => valorAtual || ultimaCameraSeguiuColetorRef.current === null);
+    } else {
+      ultimaCameraSeguiuColetorRef.current = null;
+    }
+  }, [coletorEmColetaAtiva, tipoUsuario]);
 
   const destino = useMemo(() => toCoordenada(doacaoAtiva), [doacaoAtiva]);
   const origemRota = useMemo(() => {
@@ -1016,15 +1043,24 @@ export default function MapaHome({
   }, [destino, minhaLocalizacao, origemRota]);
 
   useEffect(() => {
-    if (loading) return;
+    if (!coletorEmColetaAtiva || !seguirColetor || !minhaLocalizacao || !cameraRef.current) return;
 
-    const chave = doacaoAtiva?.id ?? "sem-doacao";
-    if (ultimoAutoCenterIdRef.current === chave) return;
+    const ultima = ultimaCameraSeguiuColetorRef.current;
+    const agora = Date.now();
+    const distancia = ultima
+      ? calcularDistanciaMetros(ultima.coordenada, minhaLocalizacao)
+      : Number.POSITIVE_INFINITY;
+    const passouTempo = ultima ? agora - ultima.timestamp >= FOLLOW_COLLECTOR_CAMERA_MIN_INTERVAL_MS : true;
 
-    ultimoAutoCenterIdRef.current = chave;
-    const timeout = setTimeout(centralizarMapa, 400);
-    return () => clearTimeout(timeout);
-  }, [centralizarMapa, loading, doacaoAtiva?.id]);
+    if (ultima && distancia < FOLLOW_COLLECTOR_CAMERA_MIN_MOVE_METERS && !passouTempo) return;
+
+    ultimaCameraSeguiuColetorRef.current = { coordenada: minhaLocalizacao, timestamp: agora };
+    cameraRef.current.setCamera({
+      centerCoordinate: [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
+      zoomLevel: FOLLOW_COLLECTOR_CAMERA_ZOOM,
+      animationDuration: 650,
+    });
+  }, [coletorEmColetaAtiva, minhaLocalizacao, seguirColetor]);
 
   async function confirmarColetaDoDoador() {
     if (!doacaoAtiva?.id || processandoAcao) return;
@@ -1091,11 +1127,10 @@ export default function MapaHome({
       >
         <Mapbox.Camera
           ref={cameraRef}
-          zoomLevel={13}
-          centerCoordinate={[
-            (minhaLocalizacao || destino || ITAREMA_CENTRO).longitude,
-            (minhaLocalizacao || destino || ITAREMA_CENTRO).latitude,
-          ]}
+          defaultSettings={{
+            centerCoordinate: [ITAREMA_CENTRO.longitude, ITAREMA_CENTRO.latitude],
+            zoomLevel: 13,
+          }}
         />
 
         {linhaFeature && (
@@ -1130,10 +1165,13 @@ export default function MapaHome({
               style={[
                 styles.recycleMarker,
                 ponto.id === pontoColetaSelecionadoId && styles.recycleMarkerSelected,
-                ponto.tipo === "ILHA_ECOLOGICA" && styles.recycleMarkerIlha,
               ]}
             >
-              <Text style={styles.recycleMarkerText}>♻️</Text>
+              <MaterialCommunityIcons
+                name="recycle"
+                size={ponto.id === pontoColetaSelecionadoId ? 34 : 28}
+                color={ponto.tipo === "ILHA_ECOLOGICA" ? "#15803d" : "#16a34a"}
+              />
             </TouchableOpacity>
           </Mapbox.MarkerView>
         ))}
@@ -1257,8 +1295,39 @@ export default function MapaHome({
               </TouchableOpacity>
             )}
 
+          {coletorEmColetaAtiva && (
+            <TouchableOpacity
+              style={[styles.followButton, seguirColetor ? styles.followButtonActive : styles.followButtonInactive]}
+              onPress={() => {
+                const novoValor = !seguirColetor;
+                setSeguirColetor(novoValor);
+
+                if (novoValor && minhaLocalizacao && cameraRef.current) {
+                  ultimaCameraSeguiuColetorRef.current = { coordenada: minhaLocalizacao, timestamp: Date.now() };
+                  cameraRef.current.setCamera({
+                    centerCoordinate: [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
+                    zoomLevel: FOLLOW_COLLECTOR_CAMERA_ZOOM,
+                    animationDuration: 500,
+                  });
+                }
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.followButtonText, seguirColetor ? styles.followButtonTextActive : styles.followButtonTextInactive]}>
+                {seguirColetor ? "Seguindo minha localização" : "Seguir minha localização"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.secondaryButton} onPress={centralizarMapa} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                centralizarMapa();
+                if (coletorEmColetaAtiva) setSeguirColetor(true);
+              }}
+              activeOpacity={0.85}
+            >
               <Text style={styles.secondaryButtonText}>Centralizar</Text>
             </TouchableOpacity>
 
@@ -1367,28 +1436,40 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   recycleMarker: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#16a34a",
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#ffffff",
+    backgroundColor: "transparent",
   },
   recycleMarkerSelected: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#15803d",
-    borderWidth: 4,
+    transform: [{ scale: 1.18 }],
   },
-  recycleMarkerIlha: {
-    backgroundColor: "#15803d",
+  followButton: {
+    marginTop: 12,
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
   },
-  recycleMarkerText: {
-    fontSize: 20,
-    lineHeight: 24,
+  followButtonActive: {
+    backgroundColor: "#dcfce7",
+    borderColor: "#16a34a",
+  },
+  followButtonInactive: {
+    backgroundColor: "#f3f4f6",
+    borderColor: "#d1d5db",
+  },
+  followButtonText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  followButtonTextActive: {
+    color: "#15803d",
+  },
+  followButtonTextInactive: {
+    color: "#374151",
   },
   confirmButton: {
     marginTop: 12,
