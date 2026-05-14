@@ -1336,7 +1336,7 @@ export default function MapaHome({
               onPress={() =>
                 onAcaoPrincipal
                   ? onAcaoPrincipal()
-                  : router.push(tipoUsuario === "COLETOR" ? "/coletas" : "/doacao")
+                  : router.push(tipoUsuario === "COLETOR" ? "/coletas" : "/doacao/casa")
               }
               activeOpacity={0.85}
             >

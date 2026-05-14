@@ -69,6 +69,7 @@ export const styles = StyleSheet.create({
   },
 
   textarea: {
+    color: "#111827",
     width: "100%",
     maxWidth: 480,
     height: 140,

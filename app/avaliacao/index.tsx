@@ -4,6 +4,8 @@ import { styles } from "@/src/styles/avaliacaoStyles";
 import { useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -57,7 +59,7 @@ export default function Avaliacao() {
   }
 
   return (
-    <View style={styles.page}>
+    <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {/* Top Bar */}
       <View style={styles.topBar}>
         <Pressable style={styles.backBtn} onPress={() => router.back()}>
@@ -66,7 +68,7 @@ export default function Avaliacao() {
         <Text style={styles.topTitle}>Avaliação</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Avalie nosso aplicativo</Text>
 
         <Text style={styles.subtitle}>
@@ -96,6 +98,8 @@ export default function Avaliacao() {
         {/* Comentário */}
         <TextInput
           placeholder="Deixe seu comentário aqui..."
+          placeholderTextColor="#667085"
+          selectionColor="#111827"
           style={styles.textarea}
           multiline
           value={comentario}
@@ -107,6 +111,6 @@ export default function Avaliacao() {
           <Text style={styles.buttonText}>Enviar Avaliação</Text>
         </Pressable>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }

@@ -1,6 +1,12 @@
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: "center",
+    padding: 16,
+  },
+
   container: {
     flex: 1,
     backgroundColor: "#e8f5e9",
@@ -49,6 +55,7 @@ export const styles = StyleSheet.create({
   },
 
   input: {
+    color: "#111827",
     width: "100%",
     borderWidth: 1,
     borderColor: "#ccc",

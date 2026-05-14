@@ -42,7 +42,7 @@ export default function Home() {
     if (tipoUsuario === "COLETOR") {
       router.push("/coletas");
     } else {
-      router.push("/doacao");
+      router.push("/doacao/casa");
     }
   }
 

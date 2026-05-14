@@ -1,6 +1,12 @@
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    padding: 20,
+  },
+
   page: {
     flex: 1,
     padding: 20,

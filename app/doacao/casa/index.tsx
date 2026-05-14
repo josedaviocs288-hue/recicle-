@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +14,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 
 import { api } from "@/src/services/api";
@@ -21,9 +23,7 @@ import { emitirAtualizacaoGlobal } from "@/src/utils/appEvents";
 
 function normalizarUF(valor?: string | null) {
   if (!valor) return "CE";
-
   const v = valor.trim().toUpperCase();
-
   if (v === "CEARÁ" || v === "CEARA") return "CE";
   return v.length > 2 ? "CE" : v;
 }
@@ -31,9 +31,10 @@ function normalizarUF(valor?: string | null) {
 type TipoQuantidade = "quilo" | "unidade";
 
 export default function DoacaoCasa() {
+  const { width } = useWindowDimensions();
+  const isSmall = width < 360;
   const [tipoReciclavel, setTipoReciclavel] = useState("");
-  const [tipoQuantidade, setTipoQuantidade] =
-    useState<TipoQuantidade>("quilo");
+  const [tipoQuantidade, setTipoQuantidade] = useState<TipoQuantidade>("quilo");
   const [quantidade, setQuantidade] = useState("");
   const [numero, setNumero] = useState("");
   const [referencia, setReferencia] = useState("");
@@ -41,19 +42,51 @@ export default function DoacaoCasa() {
 
   const [rua, setRua] = useState("");
   const [bairro, setBairro] = useState("");
-  const [cidade, setCidade] = useState("");
-  const [uf, setUf] = useState("");
+  const [cidade, setCidade] = useState("Itarema");
+  const [uf, setUf] = useState("CE");
 
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
 
   const [carregandoLocalizacao, setCarregandoLocalizacao] = useState(false);
+  const [buscandoEndereco, setBuscandoEndereco] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const quantidadeNumerica = useMemo(() => {
     const valorTratado = quantidade.replace(",", ".");
     return Number(valorTratado);
   }, [quantidade]);
+
+  function limparCoordenadasAoEditarEndereco() {
+    if (latitude !== null || longitude !== null) {
+      setLatitude(null);
+      setLongitude(null);
+    }
+  }
+
+  async function preencherEnderecoPorCoordenadas(lat: number, lng: number) {
+    try {
+      const enderecos = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+      const endereco = enderecos?.[0];
+
+      if (endereco) {
+        setRua(endereco.street || endereco.name || "");
+        setBairro(endereco.district || endereco.subregion || "");
+        setCidade(endereco.city || endereco.subregion || "Itarema");
+        setUf(normalizarUF(endereco.region || "CE"));
+
+        if (!referencia.trim()) {
+          setReferencia(
+            [endereco.street, endereco.streetNumber, endereco.district].filter(Boolean).join(", ")
+          );
+        }
+
+        if (!numero.trim() && endereco.streetNumber) {
+          setNumero(String(endereco.streetNumber));
+        }
+      }
+    } catch {}
+  }
 
   async function usarMinhaLocalizacao() {
     try {
@@ -62,56 +95,56 @@ export default function DoacaoCasa() {
       const { status } = await Location.requestForegroundPermissionsAsync();
 
       if (status !== "granted") {
-        Alert.alert(
-          "Permissão negada",
-          "Autorize a localização para registrar sua doação."
-        );
+        Alert.alert("Permissão negada", "Autorize a localização ou digite o endereço manualmente.");
         return;
       }
 
-      const posicao = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
+      const posicao = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const lat = posicao.coords.latitude;
       const lng = posicao.coords.longitude;
 
       setLatitude(lat);
       setLongitude(lng);
-
-      try {
-        const enderecos = await Location.reverseGeocodeAsync({
-          latitude: lat,
-          longitude: lng,
-        });
-
-        const endereco = enderecos?.[0];
-
-        if (endereco) {
-          setRua(endereco.street || endereco.name || "");
-          setBairro(endereco.district || endereco.subregion || "");
-          setCidade(endereco.city || endereco.subregion || "");
-          setUf(normalizarUF(endereco.region || "CE"));
-
-          if (!referencia.trim()) {
-            setReferencia(
-              [endereco.street, endereco.streetNumber, endereco.district]
-                .filter(Boolean)
-                .join(", ")
-            );
-          }
-
-          if (!numero.trim() && endereco.streetNumber) {
-            setNumero(String(endereco.streetNumber));
-          }
-        }
-      } catch (geoError: any) {}
+      await preencherEnderecoPorCoordenadas(lat, lng);
 
       Alert.alert("Sucesso", "Sua localização foi capturada.");
-    } catch (error: any) {
-      Alert.alert("Erro", "Não foi possível obter sua localização.");
+    } catch {
+      Alert.alert("Erro", "Não foi possível obter sua localização. Você pode digitar o endereço manualmente.");
     } finally {
       setCarregandoLocalizacao(false);
+    }
+  }
+
+  async function geocodificarEnderecoDigitado() {
+    const enderecoTexto = [rua.trim(), numero.trim(), bairro.trim(), cidade.trim() || "Itarema", normalizarUF(uf), "Brasil"]
+      .filter(Boolean)
+      .join(", ");
+
+    if (!rua.trim() || !bairro.trim() || !cidade.trim()) {
+      Alert.alert("Endereço incompleto", "Preencha rua, bairro e cidade para buscar no mapa.");
+      return null;
+    }
+
+    try {
+      setBuscandoEndereco(true);
+      const resultados = await Location.geocodeAsync(enderecoTexto);
+      const primeiro = resultados?.[0];
+
+      if (!primeiro) {
+        Alert.alert("Endereço não encontrado", "Confira o endereço digitado ou use sua localização atual.");
+        return null;
+      }
+
+      const coords = { latitude: primeiro.latitude, longitude: primeiro.longitude };
+      setLatitude(coords.latitude);
+      setLongitude(coords.longitude);
+      Alert.alert("Endereço localizado", "A localização da casa foi encontrada pelo endereço digitado.");
+      return coords;
+    } catch {
+      Alert.alert("Erro", "Não foi possível localizar esse endereço agora.");
+      return null;
+    } finally {
+      setBuscandoEndereco(false);
     }
   }
 
@@ -139,12 +172,19 @@ export default function DoacaoCasa() {
         return;
       }
 
-      if (latitude === null || longitude === null) {
-        Alert.alert(
-          "Erro",
-          "Capture sua localização antes de registrar a doação."
-        );
+      if (!rua.trim() || !bairro.trim() || !cidade.trim()) {
+        Alert.alert("Erro", "Preencha rua, bairro e cidade da casa onde o coletor deve ir.");
         return;
+      }
+
+      let latFinal = latitude;
+      let lngFinal = longitude;
+
+      if (latFinal === null || lngFinal === null) {
+        const coords = await geocodificarEnderecoDigitado();
+        if (!coords) return;
+        latFinal = coords.latitude;
+        lngFinal = coords.longitude;
       }
 
       const payload = {
@@ -155,21 +195,19 @@ export default function DoacaoCasa() {
             ? `${quantidadeNumerica} kg`
             : `${Math.round(quantidadeNumerica)} unidades`,
         quantidadeKg: tipoQuantidade === "quilo" ? quantidadeNumerica : null,
-        quantidadeUnidades:
-          tipoQuantidade === "unidade" ? Math.round(quantidadeNumerica) : null,
-        rua: rua.trim() || "Não informado",
+        quantidadeUnidades: tipoQuantidade === "unidade" ? Math.round(quantidadeNumerica) : null,
+        rua: rua.trim(),
         numero: numero.trim() || "S/N",
-        bairro: bairro.trim() || "Não informado",
+        bairro: bairro.trim(),
         cidade: cidade.trim() || "Itarema",
         uf: normalizarUF(uf),
         referencia: referencia.trim() || null,
         observacoes: observacoes.trim() || null,
-        latitude,
-        longitude,
+        latitude: latFinal,
+        longitude: lngFinal,
       };
 
       setSalvando(true);
-
       await api.post("/doacoes/casa", payload);
 
       Alert.alert("Doação registrada", "Aguarde a confirmação do coletor.");
@@ -182,20 +220,17 @@ export default function DoacaoCasa() {
       setObservacoes("");
       setRua("");
       setBairro("");
-      setCidade("");
-      setUf("");
+      setCidade("Itarema");
+      setUf("CE");
       setLatitude(null);
       setLongitude(null);
 
       emitirAtualizacaoGlobal();
-
       router.back();
     } catch (error: any) {
       Alert.alert(
         "Erro",
-        error?.response?.data?.message ||
-          error?.response?.data?.error ||
-          "Não foi possível registrar a doação."
+        error?.response?.data?.message || error?.response?.data?.error || "Não foi possível registrar a doação."
       );
     } finally {
       setSalvando(false);
@@ -203,22 +238,25 @@ export default function DoacaoCasa() {
   }
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+    >
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, isSmall && styles.containerSmall]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.headerCard}>
-          <Text style={styles.title}>Faça sua doação</Text>
+        <View style={[styles.headerCard, isSmall && styles.headerCardSmall]}>
+          <Text style={[styles.title, isSmall && styles.titleSmall]}>Faça sua doação</Text>
           <Text style={styles.subtitle}>
-            Informe o material, a quantidade e sua localização para o coletor
-            encontrar você.
+            Digite o endereço da sua casa ou use sua localização atual. O coletor irá até o local informado.
           </Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.label}>Tipo de reciclável</Text>
-
           <View style={styles.pickerWrapper}>
             <Picker
               selectedValue={tipoReciclavel}
@@ -227,31 +265,20 @@ export default function DoacaoCasa() {
               itemStyle={styles.pickerItem}
               dropdownIconColor="#111827"
             >
-              <Picker.Item
-                label="Escolha o tipo de doação"
-                value=""
-                color="#111827"
-              />
+              <Picker.Item label="Escolha o tipo de doação" value="" color="#111827" />
               <Picker.Item label="Plástico" value="PLASTICO" color="#111827" />
               <Picker.Item label="Vidro" value="VIDRO" color="#111827" />
               <Picker.Item label="Papel" value="PAPEL" color="#111827" />
               <Picker.Item label="Metal" value="METAL" color="#111827" />
-              <Picker.Item
-                label="Eletrônico"
-                value="ELETRONICO"
-                color="#111827"
-              />
+              <Picker.Item label="Eletrônico" value="ELETRONICO" color="#111827" />
             </Picker>
           </View>
 
           <Text style={styles.label}>Doar por</Text>
-
           <View style={styles.pickerWrapper}>
             <Picker
               selectedValue={tipoQuantidade}
-              onValueChange={(value: string) =>
-                setTipoQuantidade(value as TipoQuantidade)
-              }
+              onValueChange={(value: string) => setTipoQuantidade(value as TipoQuantidade)}
               style={styles.picker}
               itemStyle={styles.pickerItem}
               dropdownIconColor="#111827"
@@ -265,30 +292,76 @@ export default function DoacaoCasa() {
           <TextInput
             style={styles.textInput}
             keyboardType="numeric"
-            placeholder={
-              tipoQuantidade === "quilo"
-                ? "Digite a quantidade em kg"
-                : "Digite a quantidade em unidades"
-            }
-            placeholderTextColor="#080808"
+            placeholder={tipoQuantidade === "quilo" ? "Digite a quantidade em kg" : "Digite a quantidade em unidades"}
+            placeholderTextColor="#667085"
             value={quantidade}
             onChangeText={setQuantidade}
+            returnKeyType="next"
+          />
+
+          <Text style={styles.sectionTitle}>Endereço da coleta</Text>
+
+          <Text style={styles.label}>Rua</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Ex.: Rua José Maria"
+            placeholderTextColor="#667085"
+            value={rua}
+            onChangeText={(text) => { limparCoordenadasAoEditarEndereco(); setRua(text); }}
+            autoCapitalize="words"
           />
 
           <Text style={styles.label}>Número</Text>
           <TextInput
             style={styles.textInput}
-            placeholder="Ex.: 123"
-            placeholderTextColor="#090909"
+            placeholder="Ex.: 123 ou S/N"
+            placeholderTextColor="#667085"
             value={numero}
-            onChangeText={setNumero}
+            onChangeText={(text) => { limparCoordenadasAoEditarEndereco(); setNumero(text); }}
           />
+
+          <Text style={styles.label}>Bairro</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Ex.: Centro"
+            placeholderTextColor="#667085"
+            value={bairro}
+            onChangeText={(text) => { limparCoordenadasAoEditarEndereco(); setBairro(text); }}
+            autoCapitalize="words"
+          />
+
+          <View style={styles.rowInputs}>
+            <View style={styles.cityInput}>
+              <Text style={styles.label}>Cidade</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Itarema"
+                placeholderTextColor="#667085"
+                value={cidade}
+                onChangeText={(text) => { limparCoordenadasAoEditarEndereco(); setCidade(text); }}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.ufInput}>
+              <Text style={styles.label}>UF</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="CE"
+                placeholderTextColor="#667085"
+                value={uf}
+                onChangeText={(text) => { limparCoordenadasAoEditarEndereco(); setUf(text.toUpperCase().slice(0, 2)); }}
+                autoCapitalize="characters"
+                maxLength={2}
+              />
+            </View>
+          </View>
 
           <Text style={styles.label}>Referência do endereço</Text>
           <TextInput
             style={styles.textInput}
             placeholder="Ex.: portão azul, perto da praça"
-            placeholderTextColor="#0d0d0d"
+            placeholderTextColor="#667085"
             value={referencia}
             onChangeText={setReferencia}
           />
@@ -297,183 +370,84 @@ export default function DoacaoCasa() {
           <TextInput
             style={[styles.textInput, styles.textArea]}
             placeholder="Ex.: material separado em sacos"
-            placeholderTextColor="#0a0a0a"
+            placeholderTextColor="#667085"
             value={observacoes}
             onChangeText={setObservacoes}
             multiline
           />
 
           <Pressable
+            style={[styles.button, styles.addressButton]}
+            onPress={geocodificarEnderecoDigitado}
+            disabled={buscandoEndereco}
+          >
+            {buscandoEndereco ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Buscar endereço digitado no mapa</Text>}
+          </Pressable>
+
+          <Pressable
             style={[styles.button, styles.locationButton]}
             onPress={usarMinhaLocalizacao}
             disabled={carregandoLocalizacao}
           >
-            {carregandoLocalizacao ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Usar minha localização atual</Text>
-            )}
+            {carregandoLocalizacao ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Usar minha localização atual</Text>}
           </Pressable>
 
           {latitude !== null && longitude !== null ? (
             <View style={styles.successBox}>
-              <Text style={styles.successText}>
-                ✅ Localização capturada com sucesso
-              </Text>
-              <Text style={styles.successSubtext}>
-                {rua || "Rua não identificada"}
-                {numero ? `, ${numero}` : ""}
-              </Text>
-              <Text style={styles.successSubtext}>
-                {bairro || "Bairro não identificado"} - {cidade || "Itarema"}/
-                {uf || "CE"}
-              </Text>
-              <Text style={styles.successSubtext}>
-                Lat: {latitude.toFixed(5)} | Long: {longitude.toFixed(5)}
-              </Text>
+              <Text style={styles.successText}>✅ Localização pronta para envio</Text>
+              <Text style={styles.successSubtext}>{rua || "Rua não identificada"}{numero ? `, ${numero}` : ""}</Text>
+              <Text style={styles.successSubtext}>{bairro || "Bairro não identificado"} - {cidade || "Itarema"}/{uf || "CE"}</Text>
+              <Text style={styles.successSubtext}>Lat: {latitude.toFixed(5)} | Long: {longitude.toFixed(5)}</Text>
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.warningBox}>
+              <Text style={styles.warningText}>Digite o endereço e toque em “Buscar endereço digitado no mapa”, ou apenas registre que o app tentará localizar automaticamente antes de enviar.</Text>
+            </View>
+          )}
 
-          <Pressable
-            style={[styles.button, salvando && styles.buttonDisabled]}
-            onPress={registrarDoacao}
-            disabled={salvando}
-          >
-            {salvando ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Registrar doação</Text>
-            )}
+          <Pressable style={[styles.button, salvando && styles.buttonDisabled]} onPress={registrarDoacao} disabled={salvando}>
+            {salvando ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Registrar doação</Text>}
           </Pressable>
 
-          <Pressable
-            style={styles.secondaryButton}
-            onPress={() => router.back()}
-          >
+          <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
             <Text style={styles.secondaryButtonText}>⬅ Voltar</Text>
           </Pressable>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#eef5f0",
-  },
-  container: {
-    padding: 16,
-    paddingBottom: 28,
-  },
-  headerCard: {
-    backgroundColor: "#2e7d32",
-    borderRadius: 22,
-    padding: 20,
-    marginBottom: 16,
-  },
-  title: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: "#e7f7ea",
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 22,
-    padding: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#1f2937",
-    marginBottom: 8,
-    marginTop: 10,
-  },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: "#d8e0d9",
-    borderRadius: 14,
-    backgroundColor: "#f8fbf8",
-    overflow: "hidden",
-  },
-  picker: {
-    color: "#111827",
-    backgroundColor: "#f8fbf8",
-  },
-  pickerItem: {
-    color: "#111827",
-    fontSize: 16,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: "#d8e0d9",
-    borderRadius: 14,
-    backgroundColor: "#f8fbf8",
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "ios" ? 14 : 12,
-    fontSize: 15,
-    color: "#111827",
-  },
-  textArea: {
-    minHeight: 96,
-    textAlignVertical: "top",
-  },
-  button: {
-    marginTop: 16,
-    backgroundColor: "#33a852",
-    borderRadius: 16,
-    paddingVertical: 15,
-    alignItems: "center",
-  },
-  locationButton: {
-    backgroundColor: "#1f8efa",
-  },
-  buttonDisabled: {
-    opacity: 0.75,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  secondaryButton: {
-    marginTop: 12,
-    borderRadius: 16,
-    paddingVertical: 15,
-    alignItems: "center",
-    backgroundColor: "#e9eef3",
-  },
-  secondaryButtonText: {
-    color: "#334155",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  successBox: {
-    marginTop: 14,
-    backgroundColor: "#eef9f0",
-    borderColor: "#b7e0bf",
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-  },
-  successText: {
-    color: "#176b2c",
-    fontWeight: "700",
-  },
-  successSubtext: {
-    color: "#2f5f3a",
-    marginTop: 4,
-    fontSize: 13,
-  },
+  screen: { flex: 1, backgroundColor: "#eef5f0" },
+  container: { padding: 16, paddingBottom: 36 },
+  containerSmall: { padding: 12, paddingBottom: 32 },
+  headerCard: { backgroundColor: "#2e7d32", borderRadius: 22, padding: 20, marginBottom: 16 },
+  headerCardSmall: { padding: 16, borderRadius: 18 },
+  title: { color: "#fff", fontSize: 28, fontWeight: "bold", marginBottom: 8 },
+  titleSmall: { fontSize: 23 },
+  subtitle: { color: "#e7f7ea", fontSize: 15, lineHeight: 22 },
+  card: { backgroundColor: "#fff", borderRadius: 22, padding: 18, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
+  sectionTitle: { color: "#176b2c", fontSize: 17, fontWeight: "800", marginTop: 18, marginBottom: 2 },
+  label: { fontSize: 15, fontWeight: "700", color: "#1f2937", marginBottom: 8, marginTop: 10 },
+  pickerWrapper: { borderWidth: 1, borderColor: "#d8e0d9", borderRadius: 14, backgroundColor: "#f8fbf8", overflow: "hidden" },
+  picker: { color: "#111827", backgroundColor: "#f8fbf8" },
+  pickerItem: { color: "#111827", fontSize: 16 },
+  textInput: { borderWidth: 1, borderColor: "#d8e0d9", borderRadius: 14, backgroundColor: "#f8fbf8", paddingHorizontal: 14, paddingVertical: Platform.OS === "ios" ? 14 : 10, minHeight: 48, fontSize: 16, color: "#111827" },
+  textArea: { minHeight: 96, textAlignVertical: "top" },
+  rowInputs: { flexDirection: "row", gap: 10 },
+  cityInput: { flex: 1 },
+  ufInput: { width: 78 },
+  button: { marginTop: 16, backgroundColor: "#33a852", borderRadius: 16, paddingVertical: 15, paddingHorizontal: 12, alignItems: "center", minHeight: 52, justifyContent: "center" },
+  addressButton: { backgroundColor: "#2563eb" },
+  locationButton: { backgroundColor: "#1f8efa" },
+  buttonDisabled: { opacity: 0.75 },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold", textAlign: "center" },
+  secondaryButton: { marginTop: 12, borderRadius: 16, paddingVertical: 15, alignItems: "center", backgroundColor: "#e9eef3", minHeight: 52, justifyContent: "center" },
+  secondaryButtonText: { color: "#334155", fontSize: 16, fontWeight: "bold" },
+  successBox: { marginTop: 14, backgroundColor: "#eef9f0", borderColor: "#b7e0bf", borderWidth: 1, borderRadius: 14, padding: 12 },
+  successText: { color: "#176b2c", fontWeight: "700" },
+  successSubtext: { color: "#2f5f3a", marginTop: 4, fontSize: 13 },
+  warningBox: { marginTop: 14, backgroundColor: "#fff8e6", borderColor: "#f0d48a", borderWidth: 1, borderRadius: 14, padding: 12 },
+  warningText: { color: "#7a5600", fontSize: 13, lineHeight: 18 },
 });

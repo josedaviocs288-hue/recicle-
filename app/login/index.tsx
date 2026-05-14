@@ -4,7 +4,10 @@ import {
   Alert,
   Image,
   Pressable,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -62,7 +65,15 @@ export default function LoginScreen() {
     <LinearGradient colors={["#67d35f", "#35bfd0"]} style={styles.gradient}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safe}>
-        <View style={styles.container}>
+        <KeyboardAvoidingView
+          style={styles.safe}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <ScrollView
+            contentContainerStyle={styles.container}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           <View style={styles.card}>
             <Image
               source={require("../../src/assets/images/logo-recicle-plus.png")}
@@ -93,10 +104,11 @@ export default function LoginScreen() {
               <Text style={styles.inputIcon}>🔒</Text>
               <TextInput
                 placeholder="Digite sua senha"
-                placeholderTextColor="#8b8b8b"
+                placeholderTextColor="#667085"
                 value={senha}
                 onChangeText={setSenha}
                 secureTextEntry
+                selectionColor="#111827"
                 style={styles.input}
               />
             </View>
@@ -147,7 +159,8 @@ export default function LoginScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -157,10 +170,11 @@ const styles = StyleSheet.create({
   gradient: { flex: 1 },
   safe: { flex: 1 },
   container: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 24,
+    paddingVertical: 24,
   },
   card: {
     width: "100%",
@@ -208,7 +222,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   inputIcon: { fontSize: 18, marginRight: 10 },
-  input: { flex: 1, fontSize: 16 },
+  input: { flex: 1, fontSize: 16, color: "#111827" },
   row: {
     width: "100%",
     marginBottom: 18,

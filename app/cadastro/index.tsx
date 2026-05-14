@@ -3,6 +3,9 @@ import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -90,15 +93,23 @@ export default function Cadastro() {
   }
 
   return (
-    <View
-      style={{
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
         flex: 1,
         backgroundColor: "#12A67E",
         justifyContent: "center",
         alignItems: "center",
         paddingHorizontal: 20,
+        paddingVertical: 24,
+        minHeight: "100%",
       }}
-    >
+      >
       <View
         style={{
           width: "100%",
@@ -141,7 +152,7 @@ export default function Cadastro() {
             marginBottom: 24,
             paddingVertical: 8,
             fontSize: 16,
-            color: "#333",
+            color: "#111827",
           }}
         />
 
@@ -166,7 +177,7 @@ export default function Cadastro() {
             marginBottom: 24,
             paddingVertical: 8,
             fontSize: 16,
-            color: "#333",
+            color: "#111827",
           }}
         />
 
@@ -190,7 +201,7 @@ export default function Cadastro() {
             marginBottom: 24,
             paddingVertical: 8,
             fontSize: 16,
-            color: "#333",
+            color: "#111827",
           }}
         />
 
@@ -208,13 +219,15 @@ export default function Cadastro() {
           onChangeText={setSenha}
           placeholder=""
           secureTextEntry
+          placeholderTextColor="#667085"
+          selectionColor="#111827"
           style={{
             borderBottomWidth: 1,
             borderBottomColor: "#B8C9C4",
             marginBottom: 24,
             paddingVertical: 8,
             fontSize: 16,
-            color: "#333",
+            color: "#111827",
           }}
         />
 
@@ -270,6 +283,7 @@ export default function Cadastro() {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

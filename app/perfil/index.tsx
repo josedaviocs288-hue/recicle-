@@ -1,4 +1,4 @@
-import { View, Text, Image, Pressable, TextInput, Alert } from "react-native";
+import { View, Text, Image, Pressable, TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { useEffect, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -72,7 +72,8 @@ export default function Perfil() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.card}>
         <Text style={styles.title}>Editar Perfil</Text>
 
@@ -91,6 +92,8 @@ export default function Perfil() {
 
         <TextInput
           placeholder="Digite seu nome"
+          placeholderTextColor="#667085"
+          selectionColor="#111827"
           value={nome}
           onChangeText={setNome}
           style={styles.input}
@@ -104,6 +107,7 @@ export default function Perfil() {
           <Text style={styles.backButtonText}>Voltar</Text>
         </Pressable>
       </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

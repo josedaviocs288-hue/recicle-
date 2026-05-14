@@ -115,8 +115,6 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
         <MenuItem icon="⭐" label="Avaliação" onPress={() => navigate("/avaliacao")} />
         <MenuItem icon="👤" label="Perfil" onPress={() => navigate("/perfil")} />
         <MenuItem icon="⚙" label="Configuração" onPress={() => navigate("/configuracao")} />
-        <MenuItem icon="💬" label="Chat" onPress={() => navigate("/chat")} />
-        <MenuItem icon="🏆" label="Ranking" onPress={() => navigate("/ranking")} />
         <MenuItem icon="🔑" label="Sair" onPress={logout} />
       </Animated.View>
     </>

@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
 import api from "@/src/services/api";
 import { styles } from "@/src/styles/notificacoesStyles";
@@ -241,6 +241,12 @@ export default function NotificacoesScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backButtonText}>⬅ Voltar</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Notificações</Text>
+      </View>
       <FlatList
         data={notificacoes}
         keyExtractor={(item) => String(item.id)}

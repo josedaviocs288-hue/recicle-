@@ -12,11 +12,8 @@ export default function RootLayout() {
       <Stack.Screen name="configuracao" />
       <Stack.Screen name="doacao" />
       <Stack.Screen name="doacao/casa" />
-      <Stack.Screen name="doacao/fixa" />
       <Stack.Screen name="notificacoes" />
-      <Stack.Screen name="ranking" />
       <Stack.Screen name="avaliacao" />
-      <Stack.Screen name="chat" />
       <Stack.Screen name="onboarding" />
     </Stack>
   );

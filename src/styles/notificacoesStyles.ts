@@ -10,6 +10,34 @@ export const styles = StyleSheet.create({
     }),
   },
 
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === "ios" ? 54 : 24,
+    paddingBottom: 10,
+    backgroundColor: "#f5f5f5",
+  },
+
+  backButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#e9eef3",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+  },
+
+  backButtonText: {
+    color: "#334155",
+    fontSize: 15,
+    fontWeight: "bold",
+  },
+
+  headerTitle: {
+    color: "#1f2937",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+
   list: {
     padding: 16,
     paddingBottom: 80,
@@ -32,20 +60,30 @@ export const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 10,
+    flexWrap: "wrap",
   },
 
   viewBtn: {
     backgroundColor: "#2e7d32",
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 6,
+    borderRadius: 10,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    flexGrow: 1,
   },
 
   deleteBtn: {
     backgroundColor: "#c62828",
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 6,
+    borderRadius: 10,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    flexGrow: 1,
   },
 
   btnText: {

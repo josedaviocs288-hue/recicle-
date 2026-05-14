@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Alert, Pressable, Text, TextInput, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 type Tema = "claro" | "escuro";
 
@@ -107,7 +107,8 @@ export default function Configuracao() {
   }
 
   return (
-    <View style={[styles.page, tema === "escuro" && styles.pageDark]}>
+    <KeyboardAvoidingView style={[styles.page, tema === "escuro" && styles.pageDark]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <Text style={[styles.title, tema === "escuro" && styles.textDark]}>
         ⚙ Configurações
       </Text>
@@ -140,6 +141,7 @@ export default function Configuracao() {
           placeholder="Digite a nova senha"
           placeholderTextColor={tema === "escuro" ? "#aaa" : "#666"}
           secureTextEntry
+          selectionColor="#111827"
           value={senha}
           onChangeText={setSenha}
           style={[styles.input, tema === "escuro" && styles.inputDark]}
@@ -157,6 +159,7 @@ export default function Configuracao() {
           <Text style={styles.buttonText}>⬅ Voltar</Text>
         </Pressable>
       </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
