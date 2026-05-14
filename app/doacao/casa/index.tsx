@@ -18,6 +18,7 @@ import {
 import { api } from "@/src/services/api";
 import { getToken } from "@/src/services/token";
 import { emitirAtualizacaoGlobal } from "@/src/utils/appEvents";
+
 function normalizarUF(valor?: string | null) {
   if (!valor) return "CE";
 
@@ -104,8 +105,7 @@ export default function DoacaoCasa() {
             setNumero(String(endereco.streetNumber));
           }
         }
-      } catch (geoError: any) {
-      }
+      } catch (geoError: any) {}
 
       Alert.alert("Sucesso", "Sua localização foi capturada.");
     } catch (error: any) {
@@ -170,9 +170,7 @@ export default function DoacaoCasa() {
 
       setSalvando(true);
 
-
-      const response = await api.post("/doacoes/casa", payload);
-
+      await api.post("/doacoes/casa", payload);
 
       Alert.alert("Doação registrada", "Aguarde a confirmação do coletor.");
 
@@ -190,11 +188,9 @@ export default function DoacaoCasa() {
       setLongitude(null);
 
       emitirAtualizacaoGlobal();
-      
+
       router.back();
-
     } catch (error: any) {
-
       Alert.alert(
         "Erro",
         error?.response?.data?.message ||
@@ -222,36 +218,46 @@ export default function DoacaoCasa() {
 
         <View style={styles.card}>
           <Text style={styles.label}>Tipo de reciclável</Text>
+
           <View style={styles.pickerWrapper}>
             <Picker
               selectedValue={tipoReciclavel}
               onValueChange={(value: string) => setTipoReciclavel(value)}
-              style={{ color: tipoReciclavel ? "#111827" : "#9ca3af" }}
+              style={styles.picker}
+              itemStyle={styles.pickerItem}
+              dropdownIconColor="#111827"
             >
               <Picker.Item
                 label="Escolha o tipo de doação"
                 value=""
-                color="#9ca3af"
+                color="#111827"
               />
-              <Picker.Item label="Plástico" value="PLASTICO" />
-              <Picker.Item label="Vidro" value="VIDRO" />
-              <Picker.Item label="Papel" value="PAPEL" />
-              <Picker.Item label="Metal" value="METAL" />
-              <Picker.Item label="Eletrônico" value="ELETRONICO" />
+              <Picker.Item label="Plástico" value="PLASTICO" color="#111827" />
+              <Picker.Item label="Vidro" value="VIDRO" color="#111827" />
+              <Picker.Item label="Papel" value="PAPEL" color="#111827" />
+              <Picker.Item label="Metal" value="METAL" color="#111827" />
+              <Picker.Item
+                label="Eletrônico"
+                value="ELETRONICO"
+                color="#111827"
+              />
             </Picker>
           </View>
 
           <Text style={styles.label}>Doar por</Text>
+
           <View style={styles.pickerWrapper}>
             <Picker
               selectedValue={tipoQuantidade}
               onValueChange={(value: string) =>
                 setTipoQuantidade(value as TipoQuantidade)
               }
-              style={{ color: "#111827" }}
+              style={styles.picker}
+              itemStyle={styles.pickerItem}
+              dropdownIconColor="#111827"
             >
-              <Picker.Item label="Quilo (kg)" value="quilo" />
-              <Picker.Item label="Unidade" value="unidade" />
+              <Picker.Item label="Quilo (kg)" value="quilo" color="#111827" />
+              <Picker.Item label="Unidade" value="unidade" color="#111827" />
             </Picker>
           </View>
 
@@ -400,6 +406,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: "#f8fbf8",
     overflow: "hidden",
+  },
+  picker: {
+    color: "#111827",
+    backgroundColor: "#f8fbf8",
+  },
+  pickerItem: {
+    color: "#111827",
+    fontSize: 16,
   },
   textInput: {
     borderWidth: 1,
