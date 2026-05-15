@@ -1,28 +1,55 @@
-import { StyleSheet } from "react-native";
+import { Platform, StatusBar, StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
+  safeArea: {
+    backgroundColor: "#2e7d32",
+  },
+
   container: {
-    height: 56,
+    width: "100%",
+    minHeight: 76,
     backgroundColor: "#2e7d32",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight || 8 : 4,
+    paddingBottom: 12,
+    paddingHorizontal: 18,
   },
 
   sideButton: {
-    width: 40,
+    width: 58,
+    height: 58,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
   },
 
   icon: {
-    fontSize: 24,
-    color: "#fff"
+    fontSize: 34,
+    lineHeight: 40,
+    color: "#fff",
+    fontWeight: "800",
   },
 
   logo: {
-    height: 36,
-    width: 140
-  }
+    flex: 1,
+    height: 58,
+    maxWidth: 215,
+    marginHorizontal: 10,
+  },
+
+  logoPlaceholder: {
+    flex: 1,
+    height: 58,
+    maxWidth: 215,
+    marginHorizontal: 10,
+  },
+
+  notificationWrapper: {
+    position: "relative",
+    width: 46,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

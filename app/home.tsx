@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import MapaHome from "@/src/components/MapaHome";
 import { Navbar } from "@/src/components/navbar";
@@ -32,7 +32,6 @@ export default function Home() {
       } else {
         setTipoUsuario("DOADOR");
       }
-
     } catch (error) {
       setTipoUsuario("DOADOR");
     }
@@ -69,8 +68,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
-    ...(Platform.OS !== "web" ? { paddingTop: 16 } : {}),
   },
+
   content: {
     flex: 1,
   },
