@@ -145,6 +145,9 @@ const ROUTE_MIN_INTERVAL_MS = 9000;
 const FOLLOW_COLLECTOR_CAMERA_MIN_MOVE_METERS = 4;
 const FOLLOW_COLLECTOR_CAMERA_MIN_INTERVAL_MS = 1500;
 const FOLLOW_COLLECTOR_CAMERA_ZOOM = 16;
+const MAP_INITIAL_PITCH = 35;
+const MAP_CENTER_PITCH = 35;
+const MAP_FOLLOW_PITCH = 45;
 
 function normalizarStatus(status?: string | null) {
   return String(status || "").trim().toUpperCase();
@@ -1038,6 +1041,7 @@ export default function MapaHome({
     cameraRef.current.setCamera({
       centerCoordinate: [centro.longitude, centro.latitude],
       zoomLevel: 14,
+      pitch: MAP_CENTER_PITCH,
       animationDuration: 700,
     });
   }, [destino, minhaLocalizacao, origemRota]);
@@ -1058,6 +1062,7 @@ export default function MapaHome({
     cameraRef.current.setCamera({
       centerCoordinate: [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
       zoomLevel: FOLLOW_COLLECTOR_CAMERA_ZOOM,
+      pitch: MAP_FOLLOW_PITCH,
       animationDuration: 650,
     });
   }, [coletorEmColetaAtiva, minhaLocalizacao, seguirColetor]);
@@ -1124,12 +1129,18 @@ export default function MapaHome({
         logoEnabled={false}
         compassEnabled
         scaleBarEnabled={false}
+        scrollEnabled={true}
+        zoomEnabled={true}
+        rotateEnabled={true}
+        pitchEnabled={true}
       >
         <Mapbox.Camera
           ref={cameraRef}
           defaultSettings={{
             centerCoordinate: [ITAREMA_CENTRO.longitude, ITAREMA_CENTRO.latitude],
             zoomLevel: 13,
+            pitch: MAP_INITIAL_PITCH,
+            heading: 0,
           }}
         />
 
@@ -1307,6 +1318,7 @@ export default function MapaHome({
                   cameraRef.current.setCamera({
                     centerCoordinate: [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
                     zoomLevel: FOLLOW_COLLECTOR_CAMERA_ZOOM,
+                    pitch: MAP_FOLLOW_PITCH,
                     animationDuration: 500,
                   });
                 }
