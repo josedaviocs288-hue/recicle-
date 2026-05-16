@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Mapbox from "@rnmapbox/maps";
 import * as Location from "expo-location";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -32,6 +33,8 @@ type Coordenada = {
 type LocalizacaoGPS = Coordenada & {
   accuracy?: number | null;
   speed?: number | null;
+  heading?: number | null;
+  altitude?: number | null;
   timestamp: number;
 };
 
@@ -83,6 +86,11 @@ type ApiResponse<T> = {
   data?: T;
 };
 
+type RouteMetrics = {
+  distanciaMetros: number | null;
+  duracaoSegundos: number | null;
+};
+
 type Props = {
   tipoUsuario?: TipoUsuario;
   onAcaoPrincipal?: () => void;
@@ -127,20 +135,20 @@ const PONTOS_COLETA_SELETIVA: PontoColetaSeletiva[] = [
 ];
 
 // Limites de segurança. A decisão final do GPS é adaptativa nas funções abaixo.
-const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 170;
-const GPS_MAX_FIRST_ACCURACY_METERS = 200;
-const GPS_HISTORY_SIZE = 5;
-const GPS_MIN_RELEVANT_MOVE_METERS = 1.5;
-const GPS_RECENT_WINDOW_MS = 35000;
+const GPS_MAX_ACCEPTABLE_ACCURACY_METERS = 120;
+const GPS_MAX_FIRST_ACCURACY_METERS = 180;
+const GPS_HISTORY_SIZE = 8;
+const GPS_MIN_RELEVANT_MOVE_METERS = 1.2;
+const GPS_RECENT_WINDOW_MS = 30000;
 const GPS_NEAR_DESTINATION_METERS = 50;
 const GPS_FAR_FROM_DESTINATION_METERS = 300;
 
-const TRACKING_MIN_MOVE_METERS = 8;
-const TRACKING_MIN_INTERVAL_MS = 7000;
+const TRACKING_MIN_MOVE_METERS = 5;
+const TRACKING_MIN_INTERVAL_MS = 3500;
 
-const ROUTE_RECALC_ORIGIN_METERS = 30;
-const ROUTE_RECALC_DESTINATION_METERS = 10;
-const ROUTE_MIN_INTERVAL_MS = 9000;
+const ROUTE_RECALC_ORIGIN_METERS = 15;
+const ROUTE_RECALC_DESTINATION_METERS = 6;
+const ROUTE_MIN_INTERVAL_MS = 5000;
 
 const FOLLOW_COLLECTOR_CAMERA_MIN_MOVE_METERS = 4;
 const FOLLOW_COLLECTOR_CAMERA_MIN_INTERVAL_MS = 1500;
@@ -148,6 +156,12 @@ const FOLLOW_COLLECTOR_CAMERA_ZOOM = 16;
 const MAP_INITIAL_PITCH = 35;
 const MAP_CENTER_PITCH = 35;
 const MAP_FOLLOW_PITCH = 45;
+const LOCATION_ACTIVE_INTERVAL_MS = 1500;
+const LOCATION_PASSIVE_INTERVAL_MS = 6000;
+const LOCATION_ACTIVE_DISTANCE_METERS = 2;
+const LOCATION_PASSIVE_DISTANCE_METERS = 8;
+const MAPBOX_DIRECTIONS_PROFILE = "driving-traffic";
+
 
 function normalizarStatus(status?: string | null) {
   return String(status || "").trim().toUpperCase();
@@ -193,6 +207,37 @@ function calcularDistanciaMetros(origem: Coordenada, destino: Coordenada) {
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+function calcularBearingGraus(origem: Coordenada, destino: Coordenada) {
+  const lat1 = (origem.latitude * Math.PI) / 180;
+  const lat2 = (destino.latitude * Math.PI) / 180;
+  const deltaLng = ((destino.longitude - origem.longitude) * Math.PI) / 180;
+
+  const y = Math.sin(deltaLng) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
+
+  return (Math.atan2(y, x) * 180) / Math.PI;
+}
+
+function normalizarBearingGraus(valor?: number | null) {
+  const numero = Number(valor);
+  if (!Number.isFinite(numero) || numero < 0) return null;
+  return ((numero % 360) + 360) % 360;
+}
+
+function formatarDuracao(segundos?: number | null) {
+  const valor = Number(segundos);
+  if (!Number.isFinite(valor) || valor <= 0) return "";
+  const minutos = Math.max(1, Math.round(valor / 60));
+
+  if (minutos < 60) return `${minutos} min`;
+
+  const horas = Math.floor(minutos / 60);
+  const resto = minutos % 60;
+  return resto ? `${horas}h ${resto}min` : `${horas}h`;
 }
 
 function formatarDistancia(metros?: number | null) {
@@ -328,6 +373,8 @@ function posicaoParaLocalizacaoGPS(posicao: Location.LocationObject): Localizaca
     longitude,
     accuracy: posicao.coords.accuracy,
     speed: posicao.coords.speed,
+    heading: posicao.coords.heading,
+    altitude: posicao.coords.altitude,
     timestamp: posicao.timestamp || Date.now(),
   };
 }
@@ -546,6 +593,7 @@ export default function MapaHome({
   onAcaoPrincipal,
   menuOpen = false,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const cameraRef = useRef<any>(null);
   const mountedRef = useRef(true);
   const ultimaLocalizacaoGPSRef = useRef<LocalizacaoGPS | null>(null);
@@ -565,6 +613,10 @@ export default function MapaHome({
   const [doacaoSelecionadaId, setDoacaoSelecionadaId] = useState<number | null>(null);
   const [pontoColetaSelecionadoId, setPontoColetaSelecionadoId] = useState<number | null>(null);
   const [rotaGeoJSON, setRotaGeoJSON] = useState<any>(null);
+  const [rotaMetricas, setRotaMetricas] = useState<RouteMetrics>({
+    distanciaMetros: null,
+    duracaoSegundos: null,
+  });
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [processandoAcao, setProcessandoAcao] = useState(false);
@@ -816,11 +868,20 @@ export default function MapaHome({
           if (gps) aplicarLocalizacao(gps);
         }
 
+        const rastreamentoAtivo = tipoUsuario === "COLETOR" && coletorEmColetaAtiva;
+        const accuracy = rastreamentoAtivo
+          ? Location.Accuracy.BestForNavigation
+          : Location.Accuracy.Highest;
+
         subscription = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.Highest,
-            timeInterval: 2500,
-            distanceInterval: 2,
+            accuracy,
+            timeInterval: rastreamentoAtivo
+              ? LOCATION_ACTIVE_INTERVAL_MS
+              : LOCATION_PASSIVE_INTERVAL_MS,
+            distanceInterval: rastreamentoAtivo
+              ? LOCATION_ACTIVE_DISTANCE_METERS
+              : LOCATION_PASSIVE_DISTANCE_METERS,
             mayShowUserSettingsDialog: true,
           },
           (posicao) => {
@@ -843,12 +904,24 @@ export default function MapaHome({
       cancelado = true;
       if (subscription) subscription.remove();
     };
-  }, [aplicarLocalizacao]);
+  }, [aplicarLocalizacao, coletorEmColetaAtiva, tipoUsuario]);
 
   const distanciaAteDestino = useMemo(() => {
+    if (Number.isFinite(Number(rotaMetricas.distanciaMetros))) {
+      return Number(rotaMetricas.distanciaMetros);
+    }
+
     if (!origemRota || !destino) return null;
     return calcularDistanciaMetros(origemRota, destino);
-  }, [destino, origemRota]);
+  }, [destino, origemRota, rotaMetricas.distanciaMetros]);
+
+  const tempoEstimadoAteDestino = useMemo(() => {
+    if (Number.isFinite(Number(rotaMetricas.duracaoSegundos))) {
+      return Number(rotaMetricas.duracaoSegundos);
+    }
+
+    return null;
+  }, [rotaMetricas.duracaoSegundos]);
 
   useEffect(() => {
     async function enviarLocalizacaoColetor() {
@@ -884,6 +957,7 @@ export default function MapaHome({
     async function buscarRotaMapbox() {
       if (!mapboxToken || !origemRota || !destino) {
         setRotaGeoJSON(null);
+        setRotaMetricas({ distanciaMetros: null, duracaoSegundos: null });
         ultimaRotaRef.current = null;
         rotaAbortRef.current?.abort();
         return;
@@ -900,7 +974,7 @@ export default function MapaHome({
       try {
         const origem = `${origemRota.longitude},${origemRota.latitude}`;
         const fim = `${destino.longitude},${destino.latitude}`;
-        const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origem};${fim}?geometries=geojson&overview=full&alternatives=false&steps=false&access_token=${mapboxToken}`;
+        const url = `https://api.mapbox.com/directions/v5/mapbox/${MAPBOX_DIRECTIONS_PROFILE}/${origem};${fim}?geometries=geojson&overview=full&alternatives=false&steps=false&access_token=${mapboxToken}`;
 
         const response = await fetch(url, { signal: controller.signal });
 
@@ -909,7 +983,8 @@ export default function MapaHome({
         }
 
         const data = await response.json();
-        const coordinates = data?.routes?.[0]?.geometry?.coordinates;
+        const rotaPrincipal = data?.routes?.[0];
+        const coordinates = rotaPrincipal?.geometry?.coordinates;
 
         if (!mountedRef.current || controller.signal.aborted) return;
 
@@ -927,6 +1002,15 @@ export default function MapaHome({
               },
             ],
           });
+          setRotaMetricas({
+            distanciaMetros: Number.isFinite(Number(rotaPrincipal?.distance))
+              ? Number(rotaPrincipal.distance)
+              : null,
+            duracaoSegundos: Number.isFinite(Number(rotaPrincipal?.duration))
+              ? Number(rotaPrincipal.duration)
+              : null,
+          });
+
           ultimaRotaRef.current = {
             origem: origemRota,
             destino,
@@ -1031,9 +1115,17 @@ export default function MapaHome({
       cameraRef.current.fitBounds(
         [origemRota.longitude, origemRota.latitude],
         [destino.longitude, destino.latitude],
-        [90, 70, 280, 70],
+        [110, 80, 310, 80],
         700
       );
+
+      setTimeout(() => {
+        cameraRef.current?.setCamera({
+          pitch: MAP_CENTER_PITCH,
+          animationDuration: 250,
+        });
+      }, 720);
+
       return;
     }
 
@@ -1059,10 +1151,14 @@ export default function MapaHome({
     if (ultima && distancia < FOLLOW_COLLECTOR_CAMERA_MIN_MOVE_METERS && !passouTempo) return;
 
     ultimaCameraSeguiuColetorRef.current = { coordenada: minhaLocalizacao, timestamp: agora };
+    const headingGPS = normalizarBearingGraus(ultimaLocalizacaoGPSRef.current?.heading);
+    const headingRota = destino ? normalizarBearingGraus(calcularBearingGraus(minhaLocalizacao, destino)) : null;
+
     cameraRef.current.setCamera({
       centerCoordinate: [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
       zoomLevel: FOLLOW_COLLECTOR_CAMERA_ZOOM,
       pitch: MAP_FOLLOW_PITCH,
+      heading: headingGPS ?? headingRota ?? 0,
       animationDuration: 650,
     });
   }, [coletorEmColetaAtiva, minhaLocalizacao, seguirColetor]);
@@ -1238,7 +1334,7 @@ export default function MapaHome({
       )}
 
       {!menuOpen && (
-        <View style={styles.infoCard}>
+        <View style={[styles.infoCard, { bottom: Math.max(insets.bottom + 14, 18) }]}>
           {loading ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator color="#16a34a" />
@@ -1269,9 +1365,14 @@ export default function MapaHome({
               {distanciaAteDestino !== null && (
                 <Text style={styles.infoText}>
                   {tipoUsuario === "DOADOR" && localizacaoColetor
-                    ? "Distância aproximada do coletor até sua casa: "
-                    : "Distância aproximada: "}
+                    ? "Distância pela rota do coletor até sua casa: "
+                    : rotaMetricas.distanciaMetros !== null
+                      ? "Distância pela rota: "
+                      : "Distância aproximada: "}
                   {formatarDistancia(distanciaAteDestino)}
+                  {tempoEstimadoAteDestino !== null
+                    ? ` • previsão ${formatarDuracao(tempoEstimadoAteDestino)}`
+                    : ""}
                 </Text>
               )}
               {tipoUsuario === "DOADOR" && ["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(normalizarStatus(doacaoAtiva.status)) && !localizacaoColetor && (
@@ -1315,10 +1416,14 @@ export default function MapaHome({
 
                 if (novoValor && minhaLocalizacao && cameraRef.current) {
                   ultimaCameraSeguiuColetorRef.current = { coordenada: minhaLocalizacao, timestamp: Date.now() };
+                  const headingGPS = normalizarBearingGraus(ultimaLocalizacaoGPSRef.current?.heading);
+                  const headingRota = destino ? normalizarBearingGraus(calcularBearingGraus(minhaLocalizacao, destino)) : null;
+
                   cameraRef.current.setCamera({
                     centerCoordinate: [minhaLocalizacao.longitude, minhaLocalizacao.latitude],
                     zoomLevel: FOLLOW_COLLECTOR_CAMERA_ZOOM,
                     pitch: MAP_FOLLOW_PITCH,
+                    heading: headingGPS ?? headingRota ?? 0,
                     animationDuration: 500,
                   });
                 }
