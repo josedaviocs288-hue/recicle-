@@ -621,6 +621,8 @@ export default function MapaHome({
   const [erro, setErro] = useState("");
   const [processandoAcao, setProcessandoAcao] = useState(false);
   const [seguirColetor, setSeguirColetor] = useState(tipoUsuarioProp === "COLETOR");
+  const [selecionandoLocalDoacao, setSelecionandoLocalDoacao] = useState(false);
+  const [localDoacaoSelecionado, setLocalDoacaoSelecionado] = useState<Coordenada | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -726,6 +728,13 @@ export default function MapaHome({
   const coletorEmColetaAtiva =
     tipoUsuario === "COLETOR" &&
     ["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(statusDoacaoAtiva);
+
+  useEffect(() => {
+    if (tipoUsuario !== "DOADOR") {
+      setSelecionandoLocalDoacao(false);
+      setLocalDoacaoSelecionado(null);
+    }
+  }, [tipoUsuario]);
 
   useEffect(() => {
     if (tipoUsuario !== "COLETOR") {
@@ -1189,12 +1198,88 @@ export default function MapaHome({
   }
 
   function handlePressDoacao(event: any) {
+    if (selecionandoLocalDoacao && tipoUsuario === "DOADOR") {
+      const coordenada = extrairCoordenadaDoToqueNoMapa(event);
+      if (coordenada) {
+        setLocalDoacaoSelecionado(coordenada);
+        setPontoColetaSelecionadoId(null);
+        setDoacaoSelecionadaId(null);
+      }
+      return;
+    }
+
     const feature = event?.features?.[0];
     const id = Number(feature?.properties?.id);
     if (Number.isFinite(id) && id > 0) {
       setPontoColetaSelecionadoId(null);
       setDoacaoSelecionadaId(id);
     }
+  }
+
+  function extrairCoordenadaDoToqueNoMapa(event: any): Coordenada | null {
+    const coordinates =
+      event?.geometry?.coordinates ||
+      event?.coordinates ||
+      event?.features?.[0]?.geometry?.coordinates;
+
+    const longitude = Number(coordinates?.[0]);
+    const latitude = Number(coordinates?.[1]);
+
+    if (!coordenadaValida(latitude, longitude)) return null;
+
+    return { latitude, longitude };
+  }
+
+  function handlePressMapa(event: any) {
+    if (!selecionandoLocalDoacao || tipoUsuario !== "DOADOR") return;
+
+    const coordenada = extrairCoordenadaDoToqueNoMapa(event);
+    if (!coordenada) return;
+
+    setLocalDoacaoSelecionado(coordenada);
+    setPontoColetaSelecionadoId(null);
+    setDoacaoSelecionadaId(null);
+  }
+
+  function iniciarSelecaoLocalDoacao() {
+    if (tipoUsuario !== "DOADOR") return;
+
+    setSelecionandoLocalDoacao(true);
+    setLocalDoacaoSelecionado(null);
+    setPontoColetaSelecionadoId(null);
+    setDoacaoSelecionadaId(null);
+
+    const centro = minhaLocalizacao || ITAREMA_CENTRO;
+    cameraRef.current?.setCamera({
+      centerCoordinate: [centro.longitude, centro.latitude],
+      zoomLevel: 16,
+      pitch: MAP_CENTER_PITCH,
+      animationDuration: 650,
+    });
+  }
+
+  function cancelarSelecaoLocalDoacao() {
+    setSelecionandoLocalDoacao(false);
+    setLocalDoacaoSelecionado(null);
+  }
+
+  function confirmarLocalDoacaoSelecionado() {
+    if (!localDoacaoSelecionado) {
+      Alert.alert("Escolha um local", "Toque no ponto do mapa onde o coletor deve buscar a doação.");
+      return;
+    }
+
+    router.push({
+      pathname: "/doacao/casa",
+      params: {
+        origemMapa: "1",
+        latitude: String(localDoacaoSelecionado.latitude),
+        longitude: String(localDoacaoSelecionado.longitude),
+      },
+    });
+
+    setSelecionandoLocalDoacao(false);
+    setLocalDoacaoSelecionado(null);
   }
 
   const tituloBotao = tipoUsuario === "COLETOR" ? "Ver coletas" : "Fazer doação";
@@ -1229,6 +1314,7 @@ export default function MapaHome({
         zoomEnabled={true}
         rotateEnabled={true}
         pitchEnabled={true}
+        onPress={handlePressMapa}
       >
         <Mapbox.Camera
           ref={cameraRef}
@@ -1266,6 +1352,13 @@ export default function MapaHome({
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => {
+                if (selecionandoLocalDoacao && tipoUsuario === "DOADOR") {
+                  setLocalDoacaoSelecionado({ latitude: ponto.latitude, longitude: ponto.longitude });
+                  setPontoColetaSelecionadoId(null);
+                  setDoacaoSelecionadaId(null);
+                  return;
+                }
+
                 setPontoColetaSelecionadoId(ponto.id);
                 setDoacaoSelecionadaId(null);
               }}
@@ -1282,6 +1375,18 @@ export default function MapaHome({
             </TouchableOpacity>
           </Mapbox.MarkerView>
         ))}
+
+        {localDoacaoSelecionado && (
+          <Mapbox.MarkerView
+            id="local-doacao-selecionado"
+            coordinate={[localDoacaoSelecionado.longitude, localDoacaoSelecionado.latitude]}
+            anchor={{ x: 0.5, y: 1 }}
+          >
+            <View style={styles.selectedDonationMarker}>
+              <MaterialCommunityIcons name="map-marker-check" size={34} color="#16a34a" />
+            </View>
+          </Mapbox.MarkerView>
+        )}
 
         <Mapbox.ShapeSource id="pontos-doacoes" shape={pointsFeature as any} onPress={handlePressDoacao}>
           <Mapbox.CircleLayer
@@ -1327,15 +1432,55 @@ export default function MapaHome({
 
       {!menuOpen && (
         <View style={styles.topCard}>
-          <Text style={styles.topTitle}>Mapa Recicle+</Text>
-          <Text style={styles.topText}>{textoLocalizacao}</Text>
+          <Text style={styles.topTitle}>{selecionandoLocalDoacao ? "Escolha o local da doação" : "Mapa Recicle+"}</Text>
+          <Text style={styles.topText}>
+            {selecionandoLocalDoacao
+              ? "Arraste o mapa, dê zoom e toque exatamente no ponto onde o coletor deve buscar."
+              : textoLocalizacao}
+          </Text>
           {!!erro && <Text style={styles.errorInline}>{erro}</Text>}
         </View>
       )}
 
       {!menuOpen && (
         <View style={[styles.infoCard, { bottom: Math.max(insets.bottom + 14, 18) }]}>
-          {loading ? (
+          {selecionandoLocalDoacao ? (
+            <>
+              <Text style={styles.infoTitle}>Marcar local da coleta</Text>
+              <Text style={styles.infoText}>
+                Toque no ponto do mapa onde sua doação estará. Depois confirme para abrir a tela de doação com a localização já preenchida.
+              </Text>
+              {localDoacaoSelecionado ? (
+                <View style={styles.selectedLocationBox}>
+                  <Text style={styles.selectedLocationText}>Local selecionado</Text>
+                  <Text style={styles.selectedLocationSubtext}>
+                    Lat: {localDoacaoSelecionado.latitude.toFixed(5)} | Long: {localDoacaoSelecionado.longitude.toFixed(5)}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.hintText}>Nenhum local marcado ainda. Toque em qualquer ponto do mapa.</Text>
+              )}
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={cancelarSelecaoLocalDoacao}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.secondaryButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.mainButton, !localDoacaoSelecionado && styles.disabledButton]}
+                  onPress={confirmarLocalDoacaoSelecionado}
+                  disabled={!localDoacaoSelecionado}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.mainButtonText}>Usar este local</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : loading ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator color="#16a34a" />
               <Text style={styles.infoText}>Carregando doações...</Text>
@@ -1447,6 +1592,16 @@ export default function MapaHome({
             >
               <Text style={styles.secondaryButtonText}>Centralizar</Text>
             </TouchableOpacity>
+
+            {tipoUsuario === "DOADOR" && (
+              <TouchableOpacity
+                style={styles.mapDonationButton}
+                onPress={iniciarSelecaoLocalDoacao}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.mapDonationButtonText}>Doar no mapa</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.mainButton}
@@ -1562,6 +1717,34 @@ const styles = StyleSheet.create({
   recycleMarkerSelected: {
     transform: [{ scale: 1.18 }],
   },
+  selectedDonationMarker: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#16a34a",
+  },
+  selectedLocationBox: {
+    marginTop: 12,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    borderRadius: 12,
+    padding: 10,
+  },
+  selectedLocationText: {
+    color: "#166534",
+    fontWeight: "900",
+    fontSize: 13,
+  },
+  selectedLocationSubtext: {
+    color: "#166534",
+    marginTop: 3,
+    fontSize: 12,
+  },
   followButton: {
     marginTop: 12,
     minHeight: 44,
@@ -1621,6 +1804,22 @@ const styles = StyleSheet.create({
     color: "#0369a1",
     fontSize: 14,
     fontWeight: "800",
+  },
+  mapDonationButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f0fdf4",
+    borderWidth: 1,
+    borderColor: "#16a34a",
+  },
+  mapDonationButtonText: {
+    color: "#15803d",
+    fontSize: 13,
+    fontWeight: "900",
+    textAlign: "center",
   },
   mainButton: {
     flex: 1,

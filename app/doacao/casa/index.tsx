@@ -1,8 +1,8 @@
 // @ts-ignore
 import { Picker } from "@react-native-picker/picker";
 import * as Location from "expo-location";
-import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -30,9 +30,24 @@ function normalizarUF(valor?: string | null) {
 
 type TipoQuantidade = "quilo" | "unidade";
 
+function parametroParaTexto(valor: string | string[] | undefined) {
+  if (Array.isArray(valor)) return valor[0] || "";
+  return valor || "";
+}
+
+function parametroParaNumero(valor: string | string[] | undefined) {
+  const numero = Number(parametroParaTexto(valor).replace(",", "."));
+  return Number.isFinite(numero) ? numero : null;
+}
+
 export default function DoacaoCasa() {
   const { width } = useWindowDimensions();
   const isSmall = width < 360;
+  const params = useLocalSearchParams<{
+    origemMapa?: string;
+    latitude?: string;
+    longitude?: string;
+  }>();
   const [tipoReciclavel, setTipoReciclavel] = useState("");
   const [tipoQuantidade, setTipoQuantidade] = useState<TipoQuantidade>("quilo");
   const [quantidade, setQuantidade] = useState("");
@@ -52,12 +67,19 @@ export default function DoacaoCasa() {
   const [buscandoEndereco, setBuscandoEndereco] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
+  const latitudeMapa = parametroParaNumero(params.latitude);
+  const longitudeMapa = parametroParaNumero(params.longitude);
+  const localizacaoSelecionadaNoMapa =
+    parametroParaTexto(params.origemMapa) === "1" && latitudeMapa !== null && longitudeMapa !== null;
+
   const quantidadeNumerica = useMemo(() => {
     const valorTratado = quantidade.replace(",", ".");
     return Number(valorTratado);
   }, [quantidade]);
 
   function limparCoordenadasAoEditarEndereco() {
+    if (localizacaoSelecionadaNoMapa) return;
+
     if (latitude !== null || longitude !== null) {
       setLatitude(null);
       setLongitude(null);
@@ -87,6 +109,14 @@ export default function DoacaoCasa() {
       }
     } catch {}
   }
+
+  useEffect(() => {
+    if (!localizacaoSelecionadaNoMapa || latitudeMapa === null || longitudeMapa === null) return;
+
+    setLatitude(latitudeMapa);
+    setLongitude(longitudeMapa);
+    preencherEnderecoPorCoordenadas(latitudeMapa, longitudeMapa);
+  }, [localizacaoSelecionadaNoMapa, latitudeMapa, longitudeMapa]);
 
   async function usarMinhaLocalizacao() {
     try {
@@ -172,7 +202,7 @@ export default function DoacaoCasa() {
         return;
       }
 
-      if (!rua.trim() || !bairro.trim() || !cidade.trim()) {
+      if (!localizacaoSelecionadaNoMapa && (!rua.trim() || !bairro.trim() || !cidade.trim())) {
         Alert.alert("Erro", "Preencha rua, bairro e cidade da casa onde o coletor deve ir.");
         return;
       }
@@ -196,9 +226,9 @@ export default function DoacaoCasa() {
             : `${Math.round(quantidadeNumerica)} unidades`,
         quantidadeKg: tipoQuantidade === "quilo" ? quantidadeNumerica : null,
         quantidadeUnidades: tipoQuantidade === "unidade" ? Math.round(quantidadeNumerica) : null,
-        rua: rua.trim(),
+        rua: rua.trim() || "Local marcado no mapa",
         numero: numero.trim() || "S/N",
-        bairro: bairro.trim(),
+        bairro: bairro.trim() || "Não informado",
         cidade: cidade.trim() || "Itarema",
         uf: normalizarUF(uf),
         referencia: referencia.trim() || null,
@@ -251,7 +281,9 @@ export default function DoacaoCasa() {
         <View style={[styles.headerCard, isSmall && styles.headerCardSmall]}>
           <Text style={[styles.title, isSmall && styles.titleSmall]}>Faça sua doação</Text>
           <Text style={styles.subtitle}>
-            Digite o endereço da sua casa ou use sua localização atual. O coletor irá até o local informado.
+            {localizacaoSelecionadaNoMapa
+              ? "A localização marcada no mapa já foi aplicada. Complete os dados da doação e confirme."
+              : "Digite o endereço da sua casa ou use sua localização atual. O coletor irá até o local informado."}
           </Text>
         </View>
 
@@ -300,6 +332,15 @@ export default function DoacaoCasa() {
           />
 
           <Text style={styles.sectionTitle}>Endereço da coleta</Text>
+
+          {localizacaoSelecionadaNoMapa && (
+            <View style={styles.mapLockedBox}>
+              <Text style={styles.mapLockedTitle}>📍 Local escolhido no mapa</Text>
+              <Text style={styles.mapLockedText}>
+                Latitude e longitude já estão preenchidas. Os botões de buscar endereço e localização atual ficam bloqueados para não trocar o ponto escolhido.
+              </Text>
+            </View>
+          )}
 
           <Text style={styles.label}>Rua</Text>
           <TextInput
@@ -377,17 +418,25 @@ export default function DoacaoCasa() {
           />
 
           <Pressable
-            style={[styles.button, styles.addressButton]}
+            style={[
+              styles.button,
+              styles.addressButton,
+              localizacaoSelecionadaNoMapa && styles.lockedLocationButton,
+            ]}
             onPress={geocodificarEnderecoDigitado}
-            disabled={buscandoEndereco}
+            disabled={buscandoEndereco || localizacaoSelecionadaNoMapa}
           >
             {buscandoEndereco ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Buscar endereço digitado no mapa</Text>}
           </Pressable>
 
           <Pressable
-            style={[styles.button, styles.locationButton]}
+            style={[
+              styles.button,
+              styles.locationButton,
+              localizacaoSelecionadaNoMapa && styles.lockedLocationButton,
+            ]}
             onPress={usarMinhaLocalizacao}
-            disabled={carregandoLocalizacao}
+            disabled={carregandoLocalizacao || localizacaoSelecionadaNoMapa}
           >
             {carregandoLocalizacao ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Usar minha localização atual</Text>}
           </Pressable>
@@ -401,7 +450,11 @@ export default function DoacaoCasa() {
             </View>
           ) : (
             <View style={styles.warningBox}>
-              <Text style={styles.warningText}>Digite o endereço e toque em “Buscar endereço digitado no mapa”, ou apenas registre que o app tentará localizar automaticamente antes de enviar.</Text>
+              <Text style={styles.warningText}>
+                {localizacaoSelecionadaNoMapa
+                  ? "Local marcado no mapa carregando. Confira os dados e aguarde alguns segundos."
+                  : "Digite o endereço e toque em “Buscar endereço digitado no mapa”, ou apenas registre que o app tentará localizar automaticamente antes de enviar."}
+              </Text>
             </View>
           )}
 
@@ -441,7 +494,11 @@ const styles = StyleSheet.create({
   button: { marginTop: 16, backgroundColor: "#33a852", borderRadius: 16, paddingVertical: 15, paddingHorizontal: 12, alignItems: "center", minHeight: 52, justifyContent: "center" },
   addressButton: { backgroundColor: "#2563eb" },
   locationButton: { backgroundColor: "#1f8efa" },
+  lockedLocationButton: { backgroundColor: "#cbd5e1", opacity: 0.65 },
   buttonDisabled: { opacity: 0.75 },
+  mapLockedBox: { marginTop: 12, backgroundColor: "#ecfdf5", borderColor: "#b7e0bf", borderWidth: 1, borderRadius: 14, padding: 12 },
+  mapLockedTitle: { color: "#176b2c", fontWeight: "800", marginBottom: 4 },
+  mapLockedText: { color: "#2f5f3a", fontSize: 13, lineHeight: 18 },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold", textAlign: "center" },
   secondaryButton: { marginTop: 12, borderRadius: 16, paddingVertical: 15, alignItems: "center", backgroundColor: "#e9eef3", minHeight: 52, justifyContent: "center" },
   secondaryButtonText: { color: "#334155", fontSize: 16, fontWeight: "bold" },
