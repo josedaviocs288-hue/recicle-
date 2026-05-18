@@ -412,13 +412,13 @@ export default function ColetasScreen() {
       const status = normalizarStatus(item.status);
 
       return (
-        ["ACEITA", "EM_ROTA", "AGUARDANDO_CONFIRMACAO"].includes(status) &&
+        ["ACEITA", "EM_ROTA"].includes(status) &&
         pertenceAoColetor(item)
       );
     });
   }, [doacoes, emailUsuario, usuarioId]);
 
-  const limiteColetasAtingido = minhasColetasAtivas.length >= 3;
+  const limiteColetasAtingido = minhasColetasAtivas.length >= 5;
   function renderBotoes(item: Doacao, processando: boolean) {
     if (!item?.id) return null;
 
@@ -643,12 +643,12 @@ export default function ColetasScreen() {
 
         <View style={styles.limitBox}>
           <Text style={styles.limitText}>
-            Coletas em andamento: {minhasColetasAtivas.length}/3
+            Coletas em andamento: {minhasColetasAtivas.length}/5
           </Text>
 
           {limiteColetasAtingido && (
             <Text style={styles.limitWarning}>
-              Você atingiu o limite. Conclua uma coleta para aceitar outra.
+              Você atingiu o limite. Marque uma coleta como realizada para aceitar outra.
             </Text>
           )}
         </View>

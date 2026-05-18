@@ -16,14 +16,12 @@ export interface Usuario {
   id?: number;
   nome: string;
   email: string;
-  cpf?: string;
   tipo: TipoUsuario | string;
 }
 
 export interface CadastroRequest {
   nome: string;
   email: string;
-  cpf: string;
   senha: string;
   tipo: string;
 }
@@ -48,7 +46,6 @@ export interface AuthResponseData {
   id?: number;
   nome?: string;
   email?: string;
-  cpf?: string;
   tipo?: string;
   token?: string;
 }
@@ -61,9 +58,6 @@ function normalizarSenha(senha: string): string {
   return String(senha || "").trim();
 }
 
-function normalizarCpf(cpf: string): string {
-  return String(cpf || "").replace(/\D/g, "");
-}
 
 function normalizarTipo(tipo: string): TipoUsuario {
   const valor = String(tipo || "").trim().toUpperCase();
@@ -78,7 +72,6 @@ function extrairAuthData(body: any): AuthResponseData {
       id: body.data.id,
       nome: body.data.nome,
       email: body.data.email,
-      cpf: body.data.cpf,
       tipo: body.data.tipo,
     };
   }
@@ -88,7 +81,6 @@ function extrairAuthData(body: any): AuthResponseData {
     id: body?.id,
     nome: body?.nome,
     email: body?.email,
-    cpf: body?.cpf,
     tipo: body?.tipo,
   };
 }
@@ -99,7 +91,6 @@ export async function salvarUsuario(usuario: Usuario): Promise<void> {
     nome: String(usuario.nome || "").trim(),
     email: String(usuario.email || "").trim().toLowerCase(),
     tipo: normalizarTipo(String(usuario.tipo || "DOADOR")),
-    cpf: usuario.cpf ? normalizarCpf(String(usuario.cpf)) : undefined,
   };
 
 
@@ -119,10 +110,6 @@ export async function salvarUsuario(usuario: Usuario): Promise<void> {
       ["usuarioId", String(usuarioNormalizado.id)],
       ["idUsuario", String(usuarioNormalizado.id)],
     ]);
-  }
-
-  if (usuarioNormalizado.cpf) {
-    await AsyncStorage.setItem("cpfUsuario", usuarioNormalizado.cpf);
   }
 
 }
@@ -151,14 +138,12 @@ export async function logout(): Promise<void> {
 export async function fazerCadastro(
   nome: string,
   email: string,
-  cpf: string,
   senha: string,
   tipo: string
 ): Promise<ApiResponse<AuthResponseData>> {
   const payload: CadastroRequest = {
     nome: String(nome || "").trim(),
     email: normalizarEmail(email),
-    cpf: normalizarCpf(cpf),
     senha: normalizarSenha(senha),
     tipo: normalizarTipo(tipo),
   };
@@ -214,7 +199,6 @@ export async function fazerLogin(
       id: data.id,
       nome: String(data?.nome || "").trim(),
       email: String(data?.email || payload.email).trim().toLowerCase(),
-      cpf: data?.cpf ? normalizarCpf(data.cpf) : undefined,
       tipo: normalizarTipo(String(data?.tipo || "DOADOR")),
     };
 
@@ -233,7 +217,6 @@ export async function fazerLogin(
         id: usuario.id,
         nome: usuario.nome,
         email: usuario.email,
-        cpf: usuario.cpf,
         tipo: String(usuario.tipo),
       },
     };
@@ -255,7 +238,6 @@ async function removerUsuario(): Promise<void> {
     "tipo",
     "usuarioId",
     "idUsuario",
-    "cpfUsuario",
   ]);
 
 }

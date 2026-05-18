@@ -15,21 +15,11 @@ import {
 export default function Cadastro() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
-  const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const tipo = "DOADOR";
-
-  function formatarCpf(valor: string) {
-    const numeros = valor.replace(/\D/g, "").slice(0, 11);
-
-    return numeros
-      .replace(/^(\d{3})(\d)/, "$1.$2")
-      .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
-      .replace(/\.(\d{3})(\d)/, ".$1-$2");
-  }
 
   async function handleCadastro() {
     if (loading) return;
@@ -38,11 +28,10 @@ export default function Cadastro() {
 
     const nomeLimpo = nome.trim();
     const emailLimpo = email.trim().toLowerCase();
-    const cpfLimpo = cpf.replace(/\D/g, "");
     const senhaLimpa = senha.trim();
 
 
-    if (!nomeLimpo || !emailLimpo || !cpfLimpo || !senhaLimpa) {
+    if (!nomeLimpo || !emailLimpo || !senhaLimpa) {
       setError("Preencha todos os campos.");
       return;
     }
@@ -52,10 +41,6 @@ export default function Cadastro() {
       return;
     }
 
-    if (cpfLimpo.length !== 11) {
-      setError("Digite um CPF válido.");
-      return;
-    }
 
     if (senhaLimpa.length < 6) {
       setError("Senha mínima de 6 caracteres.");
@@ -68,7 +53,6 @@ export default function Cadastro() {
       const respostaCadastro = await fazerCadastro(
         nomeLimpo,
         emailLimpo,
-        cpfLimpo,
         senhaLimpa,
         tipo
       );
@@ -181,29 +165,6 @@ export default function Cadastro() {
           }}
         />
 
-        <Text
-          style={{
-            color: "#7A7A7A",
-            fontSize: 14,
-            marginBottom: 6,
-          }}
-        >
-          CPF
-        </Text>
-        <TextInput
-          value={cpf}
-          onChangeText={(t) => setCpf(formatarCpf(t))}
-          placeholder=""
-          keyboardType="numeric"
-          style={{
-            borderBottomWidth: 1,
-            borderBottomColor: "#B8C9C4",
-            marginBottom: 24,
-            paddingVertical: 8,
-            fontSize: 16,
-            color: "#111827",
-          }}
-        />
 
         <Text
           style={{

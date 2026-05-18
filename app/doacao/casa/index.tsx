@@ -29,6 +29,16 @@ function normalizarUF(valor?: string | null) {
 }
 
 type TipoQuantidade = "quilo" | "unidade";
+type MaterialReciclavel = "PLASTICO" | "VIDRO" | "PAPEL" | "METAL" | "ELETRONICO";
+type TipoReciclavel = MaterialReciclavel | "MISTURADO" | "";
+
+const MATERIAIS_OPCOES: { label: string; value: MaterialReciclavel }[] = [
+  { label: "Plástico", value: "PLASTICO" },
+  { label: "Vidro", value: "VIDRO" },
+  { label: "Papel", value: "PAPEL" },
+  { label: "Metal", value: "METAL" },
+  { label: "Eletrônico", value: "ELETRONICO" },
+];
 
 function parametroParaTexto(valor: string | string[] | undefined) {
   if (Array.isArray(valor)) return valor[0] || "";
@@ -48,7 +58,8 @@ export default function DoacaoCasa() {
     latitude?: string;
     longitude?: string;
   }>();
-  const [tipoReciclavel, setTipoReciclavel] = useState("");
+  const [tipoReciclavel, setTipoReciclavel] = useState<TipoReciclavel>("");
+  const [materiaisMisturados, setMateriaisMisturados] = useState<MaterialReciclavel[]>([]);
   const [tipoQuantidade, setTipoQuantidade] = useState<TipoQuantidade>("quilo");
   const [quantidade, setQuantidade] = useState("");
   const [numero, setNumero] = useState("");
@@ -76,6 +87,26 @@ export default function DoacaoCasa() {
     const valorTratado = quantidade.replace(",", ".");
     return Number(valorTratado);
   }, [quantidade]);
+
+  const materiaisSelecionados = useMemo(() => {
+    if (tipoReciclavel === "MISTURADO") return materiaisMisturados;
+    return tipoReciclavel ? [tipoReciclavel] : [];
+  }, [materiaisMisturados, tipoReciclavel]);
+
+  function selecionarTipoReciclavel(valor: TipoReciclavel) {
+    setTipoReciclavel(valor);
+    if (valor !== "MISTURADO") {
+      setMateriaisMisturados([]);
+    }
+  }
+
+  function alternarMaterialMisturado(material: MaterialReciclavel) {
+    setMateriaisMisturados((listaAtual) =>
+      listaAtual.includes(material)
+        ? listaAtual.filter((item) => item !== material)
+        : [...listaAtual, material]
+    );
+  }
 
   function limparCoordenadasAoEditarEndereco() {
     if (localizacaoSelecionadaNoMapa) return;
@@ -192,6 +223,11 @@ export default function DoacaoCasa() {
         return;
       }
 
+      if (tipoReciclavel === "MISTURADO" && materiaisSelecionados.length < 2) {
+        Alert.alert("Erro", "No modo misturado, selecione pelo menos dois tipos de material.");
+        return;
+      }
+
       if (!quantidade.trim()) {
         Alert.alert("Erro", "Preencha a quantidade.");
         return;
@@ -218,7 +254,7 @@ export default function DoacaoCasa() {
       }
 
       const payload = {
-        materiais: [tipoReciclavel],
+        materiais: materiaisSelecionados,
         tipoQuantidade: tipoQuantidade === "quilo" ? "KG" : "UNIDADE",
         quantidadeDescricao:
           tipoQuantidade === "quilo"
@@ -243,6 +279,7 @@ export default function DoacaoCasa() {
       Alert.alert("Doação registrada", "Aguarde a confirmação do coletor.");
 
       setTipoReciclavel("");
+      setMateriaisMisturados([]);
       setTipoQuantidade("quilo");
       setQuantidade("");
       setNumero("");
@@ -289,22 +326,77 @@ export default function DoacaoCasa() {
 
         <View style={styles.card}>
           <Text style={styles.label}>Tipo de reciclável</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={tipoReciclavel}
-              onValueChange={(value: string) => setTipoReciclavel(value)}
-              style={styles.picker}
-              itemStyle={styles.pickerItem}
-              dropdownIconColor="#111827"
+          <Text style={styles.helpText}>Escolha uma opção. Use “Misturado” quando a doação tiver mais de um material.</Text>
+          <View style={styles.optionGrid}>
+            {MATERIAIS_OPCOES.map((opcao) => (
+              <Pressable
+                key={opcao.value}
+                style={[
+                  styles.optionChip,
+                  tipoReciclavel === opcao.value && styles.optionChipSelected,
+                ]}
+                onPress={() => selecionarTipoReciclavel(opcao.value)}
+              >
+                <Text
+                  style={[
+                    styles.optionChipText,
+                    tipoReciclavel === opcao.value && styles.optionChipTextSelected,
+                  ]}
+                >
+                  {opcao.label}
+                </Text>
+              </Pressable>
+            ))}
+
+            <Pressable
+              style={[
+                styles.optionChip,
+                styles.mixedChip,
+                tipoReciclavel === "MISTURADO" && styles.optionChipSelected,
+              ]}
+              onPress={() => selecionarTipoReciclavel("MISTURADO")}
             >
-              <Picker.Item label="Escolha o tipo de doação" value="" color="#111827" />
-              <Picker.Item label="Plástico" value="PLASTICO" color="#111827" />
-              <Picker.Item label="Vidro" value="VIDRO" color="#111827" />
-              <Picker.Item label="Papel" value="PAPEL" color="#111827" />
-              <Picker.Item label="Metal" value="METAL" color="#111827" />
-              <Picker.Item label="Eletrônico" value="ELETRONICO" color="#111827" />
-            </Picker>
+              <Text
+                style={[
+                  styles.optionChipText,
+                  tipoReciclavel === "MISTURADO" && styles.optionChipTextSelected,
+                ]}
+              >
+                Misturado
+              </Text>
+            </Pressable>
           </View>
+
+          {tipoReciclavel === "MISTURADO" && (
+            <View style={styles.mixedBox}>
+              <Text style={styles.mixedTitle}>Quais materiais estão misturados?</Text>
+              <View style={styles.optionGrid}>
+                {MATERIAIS_OPCOES.map((opcao) => {
+                  const selecionado = materiaisMisturados.includes(opcao.value);
+                  return (
+                    <Pressable
+                      key={opcao.value}
+                      style={[
+                        styles.optionChip,
+                        styles.smallChip,
+                        selecionado && styles.optionChipSelected,
+                      ]}
+                      onPress={() => alternarMaterialMisturado(opcao.value)}
+                    >
+                      <Text
+                        style={[
+                          styles.optionChipText,
+                          selecionado && styles.optionChipTextSelected,
+                        ]}
+                      >
+                        {selecionado ? "✓ " : ""}{opcao.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           <Text style={styles.label}>Doar por</Text>
           <View style={styles.pickerWrapper}>
@@ -483,6 +575,16 @@ const styles = StyleSheet.create({
   card: { backgroundColor: "#fff", borderRadius: 22, padding: 18, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
   sectionTitle: { color: "#176b2c", fontSize: 17, fontWeight: "800", marginTop: 18, marginBottom: 2 },
   label: { fontSize: 15, fontWeight: "700", color: "#1f2937", marginBottom: 8, marginTop: 10 },
+  helpText: { color: "#475569", fontSize: 13, lineHeight: 18, marginTop: -2, marginBottom: 10 },
+  optionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 6 },
+  optionChip: { minHeight: 46, minWidth: "47%", borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 14, backgroundColor: "#f8fbf8", paddingHorizontal: 12, paddingVertical: 12, alignItems: "center", justifyContent: "center" },
+  optionChipSelected: { backgroundColor: "#176b2c", borderColor: "#176b2c" },
+  optionChipText: { color: "#111827", fontSize: 15, fontWeight: "700", textAlign: "center" },
+  optionChipTextSelected: { color: "#fff" },
+  mixedChip: { minWidth: "96%" },
+  mixedBox: { marginTop: 8, backgroundColor: "#ecfdf5", borderColor: "#b7e0bf", borderWidth: 1, borderRadius: 14, padding: 12 },
+  mixedTitle: { color: "#176b2c", fontWeight: "800", marginBottom: 10 },
+  smallChip: { minWidth: "45%", backgroundColor: "#fff" },
   pickerWrapper: { borderWidth: 1, borderColor: "#d8e0d9", borderRadius: 14, backgroundColor: "#f8fbf8", overflow: "hidden" },
   picker: { color: "#111827", backgroundColor: "#f8fbf8" },
   pickerItem: { color: "#111827", fontSize: 16 },
