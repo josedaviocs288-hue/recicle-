@@ -37,7 +37,14 @@ module.exports = {
       supportsTablet: false,
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
-          "Permitir que o Recicle+ acesse sua localização enquanto você usa o app.",
+          "O Recicle+ usa sua localização para mostrar doações de materiais recicláveis próximas, ajudar o doador a cadastrar o local de retirada e calcular rotas para coletores. Por exemplo, quando um coletor aceita uma doação, o app usa a localização para mostrar o caminho até o endereço de retirada.",
+
+        NSPhotoLibraryUsageDescription:
+          "O Recicle+ usa acesso à sua galeria para permitir que você escolha uma foto dos materiais recicláveis ao criar uma doação. Por exemplo, o doador pode adicionar uma foto de papelão, plástico, metal ou outros itens recicláveis para ajudar o coletor a identificar o material antes da retirada.",
+
+        NSPhotoLibraryAddUsageDescription:
+          "O Recicle+ pode salvar imagens relacionadas às suas doações na sua galeria somente quando você escolher salvar ou baixar essas imagens.",
+
         ITSAppUsesNonExemptEncryption: false,
       },
     },
@@ -57,7 +64,7 @@ module.exports = {
         "expo-location",
         {
           locationWhenInUsePermission:
-            "Permitir que o Recicle+ acesse sua localização enquanto você usa o app.",
+            "O Recicle+ usa sua localização para mostrar doações de materiais recicláveis próximas, ajudar o doador a cadastrar o local de retirada e calcular rotas para coletores. Por exemplo, quando um coletor aceita uma doação, o app usa a localização para mostrar o caminho até o endereço de retirada.",
         },
       ],
     ],
