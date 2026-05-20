@@ -52,6 +52,15 @@ module.exports = {
     plugins: [
       "expo-router",
       "expo-secure-store",
+
+      [
+        "expo-image-picker",
+        {
+          photosPermission:
+            "O Recicle+ usa acesso à sua galeria para permitir que você escolha uma foto dos materiais recicláveis ao criar uma doação. Por exemplo, o doador pode adicionar uma foto de papelão, plástico, metal ou outros itens recicláveis para ajudar o coletor a identificar o material antes da retirada.",
+        },
+      ],
+
       [
         "@rnmapbox/maps",
         {
@@ -60,6 +69,7 @@ module.exports = {
             process.env.MAPBOX_DOWNLOADS_TOKEN,
         },
       ],
+
       [
         "expo-location",
         {
